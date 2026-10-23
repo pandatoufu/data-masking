@@ -1,0 +1,17 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "data-masking",
+  "outputfilename": "data-masking",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "frontend:dev:serverUrl": "none",
+  "build:dir": "build",
+  "info": {
+    "companyName": "data-masking",
+    "productName": "本地脱敏工具",
+    "productVersion": "1.2.0",
+    "copyright": "",
+    "comments": "本地脱敏工具桌面版"
+  }
+}

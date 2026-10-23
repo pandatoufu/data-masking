@@ -1,0 +1,14 @@
+/dist/
+
+# Wails 构建时生成的绑定与临时输出（非源文件）
+/frontend/wailsjs/
+/build/bin/
+
+# 构建入口管理的派生图标与 Wails 临时资源（可再生，精准忽略以避免静默复用旧图案）
+# 不忽略整个 build/windows/，以免隐藏手工维护的 manifest / info.json 等资源
+/build/windows/icon.ico
+/data-masking-res.syso
+/.opencode/
+/openspec/
+/AGENTS.md
+/CHANGELOG.md

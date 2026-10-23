@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>本地脱敏工具</title>
+<link rel="stylesheet" href="/style.css">
+<script>window.__DM_CONFIG__ = /*__DM_CONFIG__*/null;</script>
+</head>
+<body data-page="mask">
+<header>
+  <h1 data-i18n="ui.app_title">本地脱敏工具</h1>
+  <nav class="view-switch">
+    <button type="button" id="view-mask" class="view-btn" data-i18n="ui.view_mask">脱敏</button>
+    <button type="button" id="view-restore" class="view-btn" data-i18n="ui.view_restore">还原</button>
+  </nav>
+  <div class="header-right">
+    <div class="prefs">
+      <label class="pref-label"><span data-i18n="ui.theme_label">主题</span>
+        <select id="theme-select">
+          <option value="system" data-i18n="ui.theme_system">跟随系统</option>
+          <option value="light" data-i18n="ui.theme_light">浅色</option>
+          <option value="dark" data-i18n="ui.theme_dark">暗色</option>
+        </select>
+      </label>
+      <label class="pref-label"><span data-i18n="ui.language_label">语言</span>
+        <select id="language-select">
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+    </div>
+    <button id="exit-btn" class="exit-btn" type="button" data-i18n="ui.exit">退出应用</button>
+  </div>
+</header>
+
+<div id="global-status" class="global-status" role="status" aria-live="polite" hidden></div>
+
+<main>
+  <!-- ===== 脱敏视图 ===== -->
+  <section id="mask-panel" class="view-panel" aria-label="mask">
+    <form id="mask-form" autocomplete="off">
+      <!-- 文件选择区独立置顶：其下是唯一一条分隔线，不与方案控件同排。 -->
+      <div class="block file-block">
+        <div class="file-op">
+          <label class="file-btn" id="mask-file-area">
+            <input type="file" name="file" id="mask-file">
+            <span data-i18n="ui.pick_file">选择文件</span>
+          </label>
+          <div class="file-meta">
+            <span class="file-hint" data-i18n-file-hint>点击选择单个文件</span>
+            <span class="file-name" id="mask-file-name"></span>
+            <span class="file-origin" id="mask-file-origin"></span>
+          </div>
+          <!-- 格式说明常显：不依赖选文件、详情或 README；后端仍为最终门禁。 -->
+          <div class="format-note" id="mask-format-note">
+            <span class="format-line" data-i18n="ui.doc_formats_text">支持纯文本（不限后缀，可无后缀；UTF-8/GBK）与 Word .docx。</span>
+            <span class="format-line" data-i18n="ui.doc_formats_examples">纯文本示例：TXT、Markdown、CSV、JSON、YAML、代码、日志；不支持 PDF、ODT、RTF、PPTX、XLSX 等文档格式。</span>
+            <span class="format-line" data-i18n="ui.doc_formats_syntax">按纯文本替换，不保证代码或结构化数据替换后的语法有效。</span>
+          </div>
+        </div>
+        <!-- 固定目录快捷选择：只列直属文件名，显式选中后才读取；与手动入口并存。 -->
+        <div class="file-picker" id="original-picker">
+          <label class="field-label picker-field"><span data-i18n="ui.workspace_label_original">original/ 文件</span>
+            <select id="original-select">
+              <option value="" data-i18n="ui.workspace_choose_original">从 original/ 选择文件</option>
+            </select>
+          </label>
+          <button type="button" id="original-refresh" class="chip picker-refresh" data-i18n="ui.workspace_refresh">刷新</button>
+          <span class="picker-status" id="original-list-status" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+
+      <!-- 方案区：标签 → 下拉菜单 → 生效摘要 → 规则详情，纵向排列。 -->
+      <div class="block profile-block">
+        <label class="field-label profile-field"><span data-i18n="ui.profile_label">方案</span>
+          <select name="profile" id="profile-select"></select>
+        </label>
+
+        <p id="profile-summary" class="summary" hidden></p>
+        <details id="profile-details" class="profile-details">
+          <summary data-i18n="ui.rule_details">规则详情</summary>
+          <fieldset class="matrix">
+            <legend data-i18n="ui.rules_legend">规则开关矩阵（内置方案只读，自定义可调）</legend>
+            <div id="profile-matrix-body"></div>
+          </fieldset>
+        </details>
+      </div>
+
+      <div class="block word-block">
+        <!-- 非折叠容器：TXT 导入/文件名/失活提示/失败反馈始终在唯一折叠外。 -->
+        <div id="word-area" class="word-area">
+          <div class="file-op">
+            <label class="file-btn" id="word-file-area">
+              <input type="file" id="custom-file" accept=".txt">
+              <span data-i18n="ui.pick_word_file">导入 TXT</span>
+            </label>
+            <div class="file-meta">
+              <span class="file-hint" data-i18n-file-hint>点击选择单个文件</span>
+              <span class="file-name" id="word-file-name"></span>
+              <span class="file-origin" id="word-file-origin"></span>
+            </div>
+          </div>
+          <div class="file-picker" id="cards-picker">
+            <label class="field-label picker-field"><span data-i18n="ui.workspace_label_cards">cards/ 词卡</span>
+              <select id="cards-select">
+                <option value="" data-i18n="ui.workspace_choose_cards">从 cards/ 选择词卡</option>
+              </select>
+            </label>
+            <button type="button" id="cards-refresh" class="chip picker-refresh" data-i18n="ui.workspace_refresh">刷新</button>
+            <span class="picker-status" id="cards-list-status" role="status" aria-live="polite"></span>
+          </div>
+          <p id="word-disabled-hint" class="feedback" hidden></p>
+          <p id="word-feedback" class="feedback" hidden></p>
+
+          <!-- 唯一一层默认收起的自定义词 details（手输/说明/搜索/批量/勾选）。 -->
+          <details id="word-adjust" class="word-adjust">
+            <summary><span data-i18n="ui.adjust_words">自定义词</span> <span id="word-adjust-count" class="word-count"></span></summary>
+            <p class="hint" data-i18n="ui.words_hint">按字面量精确匹配（大小写敏感）；本次词与常备词共同参与本次脱敏，不勾选的不参与。</p>
+            <label class="field-label"><span data-i18n="ui.word_text_label">文本框手输（每行一个）</span>
+              <textarea id="custom" rows="3" placeholder="例如：内部项目代号" data-i18n-placeholder="ui.word_text_placeholder"></textarea>
+            </label>
+            <div class="word-tools">
+              <input type="search" id="word-search" placeholder="搜索词（仅过滤显示）" data-i18n-placeholder="ui.words_search_placeholder">
+              <button type="button" id="word-select-all" class="chip"></button>
+              <button type="button" id="word-deselect-all" class="chip"></button>
+            </div>
+            <div id="word-list" class="word-list"></div>
+          </details>
+        </div>
+      </div>
+
+      <div class="execute-actions">
+        <button type="submit" id="mask-submit" class="primary" data-i18n="ui.execute_mask">执行脱敏</button>
+      </div>
+    </form>
+
+    <section id="mask-preview" class="preview" hidden></section>
+    <div id="mask-result" class="result" hidden></div>
+    <div id="mask-error" class="error" role="alert" hidden></div>
+  </section>
+
+  <!-- ===== 还原视图 ===== -->
+  <section id="restore-panel" class="view-panel" aria-label="restore" hidden>
+    <form id="restore-form" autocomplete="off">
+      <div class="block">
+        <div class="mode-switch" role="tablist">
+          <button type="button" id="restore-mode-file" class="mode-btn" data-i18n="ui.restore_mode_file">文件</button>
+          <button type="button" id="restore-mode-text" class="mode-btn" data-i18n="ui.restore_mode_text">粘贴文本</button>
+        </div>
+        <div class="file-op" id="restore-file-op">
+          <label class="file-btn" id="restore-file-area">
+            <input type="file" name="file" id="restore-file">
+            <span data-i18n="ui.pick_reply_file">选择还原文件</span>
+          </label>
+          <div class="file-meta">
+            <span class="file-hint" data-i18n-file-hint>点击选择单个文件</span>
+            <span class="file-name" id="restore-file-name"></span>
+            <span class="file-origin" id="restore-file-origin"></span>
+          </div>
+          <!-- 文件模式常显说明；切换到粘贴文本时随文件模式隐藏。 -->
+          <div class="format-note" id="restore-format-note">
+            <span class="format-line" data-i18n="ui.doc_formats_text">支持纯文本（不限后缀，可无后缀；UTF-8/GBK）与 Word .docx。</span>
+            <span class="format-line" data-i18n="ui.doc_formats_examples">纯文本示例：TXT、Markdown、CSV、JSON、YAML、代码、日志；不支持 PDF、ODT、RTF、PPTX、XLSX 等文档格式。</span>
+            <span class="format-line" data-i18n="ui.doc_formats_syntax">按纯文本替换，不保证代码或结构化数据替换后的语法有效。</span>
+          </div>
+        </div>
+        <div class="file-picker" id="pending-picker">
+          <label class="field-label picker-field"><span data-i18n="ui.workspace_label_pending">pending/ 文件</span>
+            <select id="pending-select">
+              <option value="" data-i18n="ui.workspace_choose_pending">从 pending/ 选择文件</option>
+            </select>
+          </label>
+          <button type="button" id="pending-refresh" class="chip picker-refresh" data-i18n="ui.workspace_refresh">刷新</button>
+          <span class="picker-status" id="pending-list-status" role="status" aria-live="polite"></span>
+        </div>
+        <label class="field-label" id="restore-text-label"><span data-i18n="ui.restore_input_text">粘贴 LLM 回复文本</span>
+          <textarea name="text" id="restore-text" rows="6" placeholder="可在此粘贴内容" data-i18n-placeholder="ui.restore_text_placeholder"></textarea>
+        </label>
+      </div>
+
+      <div class="block mapping-block">
+        <!-- 同一操作行：左绿色选择映射，右中性“使用当前映射”右对齐；不含长说明。 -->
+        <div class="mapping-actions">
+          <label class="file-btn" id="restore-mapping-area">
+            <input type="file" name="mapping" id="restore-mapping" accept=".json">
+            <span data-i18n="ui.pick_mapping">选择映射</span>
+          </label>
+          <button type="button" id="use-session-mapping" class="chip mapping-use" data-i18n="ui.use_current_mapping">使用当前映射</button>
+        </div>
+        <!-- 拖入说明、来源与选中名称独立第二行，长文字换行不挤动作行。 -->
+        <div class="mapping-meta">
+          <span class="file-hint" data-i18n-file-hint>点击选择单个文件</span>
+          <span id="mapping-source" class="mapping-source"></span>
+          <span class="file-name" id="restore-mapping-name"></span>
+        </div>
+        <div class="file-picker" id="mapping-picker">
+          <label class="field-label picker-field"><span data-i18n="ui.workspace_label_mapping">mapping/ 映射</span>
+            <select id="mapping-select">
+              <option value="" data-i18n="ui.workspace_choose_mapping">从 mapping/ 选择映射</option>
+            </select>
+          </label>
+          <button type="button" id="mapping-refresh" class="chip picker-refresh" data-i18n="ui.workspace_refresh">刷新</button>
+          <span class="picker-status" id="mapping-list-status" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+
+      <div class="execute-actions">
+        <button type="submit" id="restore-submit" class="primary" data-i18n="ui.execute_restore">执行还原</button>
+      </div>
+    </form>
+
+    <div id="restore-result" class="result" hidden></div>
+    <div id="restore-error" class="error" role="alert" hidden></div>
+  </section>
+
+  <footer id="addr" class="addr"></footer>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
