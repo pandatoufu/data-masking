@@ -1186,6 +1186,14 @@
     if (c.resources_removed) parts.push(t("ui.cleanup_resources", { count: c.resources_removed }));
     return '<p class="feedback-line detail">' + esc(t("ui.cleanup_title") + parts.join("；") + "。") + "</p>";
   }
+  function pptxCleanupHTML(c) {
+    if (!c) return "";
+    var parts = [t("ui.cleanup_pptx_comments", { count: c.comments_deleted || 0 })];
+    if (c.people_parts_removed) parts.push(t("ui.cleanup_pptx_people", { count: c.people_parts_removed }));
+    if (c.parts_removed) parts.push(t("ui.cleanup_pptx_parts", { count: c.parts_removed }));
+    if (c.resources_removed) parts.push(t("ui.cleanup_pptx_resources", { count: c.resources_removed }));
+    return '<p class="feedback-line detail">' + esc(t("ui.cleanup_pptx_title") + parts.join("；") + "。") + "</p>";
+  }
   function renderMaskResults() {
     var result = $("#mask-result");
     var b = state.mask.lastBody;
@@ -1200,7 +1208,7 @@
     result.hidden = false;
     var masked = state.mask.artifacts.masked, mapping = state.mask.artifacts.mapping;
     var html = "<h2>" + th("ui.result_mask_title") + "</h2>";
-    html += '<p class="hint">' + (b.format === "docx" ? th("ui.input_docx") : th("ui.detected_encoding", { encoding: b.encoding || "UTF-8" })) + "</p>";
+    html += '<p class="hint">' + (b.format === "docx" ? th("ui.input_docx") : b.format === "pptx" ? th("ui.input_pptx") : th("ui.detected_encoding", { encoding: b.encoding || "UTF-8" })) + "</p>";
     // mapping 短提醒仅出现在脱敏成功映射行一次（重绘整体重建，不累积）。
     html += artifactCard(masked) + artifactCard(mapping, { noteID: "ui.mapping_reminder_short" });
     if (masked && mapping) {
@@ -1210,6 +1218,9 @@
     if (b.format === "docx") {
       html += cleanupHTML(b.cleanup);
       html += '<p class="feedback-line detail">' + th("ui.docx_unchecked_short") + "</p>";
+    } else if (b.format === "pptx") {
+      html += pptxCleanupHTML(b.pptx_cleanup);
+      html += '<p class="feedback-line detail">' + th("ui.pptx_unchecked_short") + "</p>";
     } else {
       html += cleanupHTML(b.cleanup);
     }
@@ -1230,10 +1241,10 @@
     }
     result.hidden = false;
     var restored = state.restore.artifacts.restored;
-    var fmt = b.format === "docx" ? th("ui.output_docx") : th("ui.output_text", { encoding: b.encoding || "UTF-8" });
+    var fmt = b.format === "docx" ? th("ui.output_docx") : b.format === "pptx" ? th("ui.output_pptx") : th("ui.output_text", { encoding: b.encoding || "UTF-8" });
     var html = "<h2>" + th("ui.result_restore_title") + "</h2>" +
       '<p class="hint">' + esc(t("ui.restored_count", { count: b.restored_count || 0 })) + "；" + fmt + "</p>" +
-      artifactCard(restored) + cleanupHTML(b.cleanup) + warningsHTML(b.warnings);
+      artifactCard(restored) + cleanupHTML(b.cleanup) + pptxCleanupHTML(b.pptx_cleanup) + warningsHTML(b.warnings);
     if (b.audit_failed) html += '<p class="feedback-line">' + th("feedback.audit_failed") + "</p>";
     result.innerHTML = html;
     bindSaveButtons();

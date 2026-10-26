@@ -19,6 +19,7 @@ import (
 	"github.com/pandatoufu/data-masking/internal/loader"
 	"github.com/pandatoufu/data-masking/internal/mapping"
 	"github.com/pandatoufu/data-masking/internal/masker"
+	"github.com/pandatoufu/data-masking/internal/pptx"
 	"github.com/pandatoufu/data-masking/internal/verifier"
 )
 
@@ -122,6 +123,7 @@ type MaskOutput struct {
 	Warnings     []Warning               `json:"warnings"`
 	Coverage     map[detector.RuleID]int `json:"coverage"`
 	Cleanup      *docx.CleanupSummary    `json:"cleanup,omitempty"`
+	PPTXCleanup  *pptx.CleanupSummary    `json:"pptx_cleanup,omitempty"`
 	AuditFailed  bool                    `json:"audit_failed"`
 }
 
@@ -137,9 +139,12 @@ func MaskFile(fileName string, data []byte, opts MaskOptions, cfg *config.Config
 	if err := loader.ValidateSize(int64(len(data)), limit); err != nil {
 		return nil, err
 	}
-	// DOCX 在纯文本 NUL/编码判定之前按扩展名分流。
+	// DOCX/PPTX 在纯文本 NUL/编码判定之前按扩展名分流。
 	if isDocxName(fileName) {
 		return maskDocx(fileName, data, opts, cfg, auditLog)
+	}
+	if isPPTXName(fileName) {
+		return maskPPTX(fileName, data, opts, cfg, auditLog)
 	}
 	doc, err := loader.Load(data, limit)
 	if err != nil {
@@ -273,6 +278,7 @@ type RestoreOutput struct {
 	RestoredCount int                  `json:"restored_count"`
 	Warnings      []Warning            `json:"warnings"`
 	Cleanup       *docx.CleanupSummary `json:"cleanup,omitempty"`
+	PPTXCleanup   *pptx.CleanupSummary `json:"pptx_cleanup,omitempty"`
 	AuditFailed   bool                 `json:"audit_failed"`
 }
 
@@ -307,9 +313,31 @@ func RestoreFile(fileName string, data []byte, mappingData []byte, cfg *config.C
 		return nil, err
 	}
 	if isDocxName(fileName) {
+		if mp.Version == 3 {
+			return nil, unsupportedCombination("PPTX")
+		}
 		return restoreDocx(fileName, data, mp, cfg, auditLog)
 	}
+	if isPPTXName(fileName) {
+		if mp.Version != 3 || mp.SourceFormat != "pptx" {
+			return nil, unsupportedCombination("PPTX")
+		}
+		return restorePPTX(fileName, data, mp, cfg, auditLog)
+	}
+	if mp.Version == 3 {
+		return nil, unsupportedCombination("PPTX")
+	}
 	return restoreText(fileName, data, mp, cfg, auditLog)
+}
+
+// unsupportedCombination 返回本期路径 A 的格式组合拒绝：仅 PPTX + PPTX 同格式。
+func unsupportedCombination(source string) error {
+	return &loader.HumanError{
+		Reason:    "不支持的格式组合：本期 PPTX 仅支持 PPTX 原件与 PPTX 回复的同格式闭环",
+		Advice:    "请使用同一任务的 .pptx 脱敏副本与 PPTX 回复；不要用 PPTX mapping 还原文本/DOCX，也不要用旧文本/DOCX mapping 还原 PPTX",
+		MessageID: "pptx.combination_unsupported",
+		Params:    map[string]any{"source": source},
+	}
 }
 
 // restoreText 是既有纯文本回程路径；对 version 2（DOCX 来源）mapping 使用文本命名与 UTF-8。

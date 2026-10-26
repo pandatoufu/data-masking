@@ -189,6 +189,16 @@ func RestoredTextName(sourceFile, ext string) string {
 	return s + ".restored." + ext
 }
 
+// RestoredPPTXName 生成 PPTX 回程文件名：源 basename 词干 + .restored.pptx。
+// 空源名回退 restored.pptx；不接受源名中的目录，避免控制本机路径。
+func RestoredPPTXName(sourceFile string) string {
+	s := stemOf(sourceFile)
+	if s == "" {
+		return "restored.pptx"
+	}
+	return s + ".restored.pptx"
+}
+
 // FormatError 是 mapping 格式/版本校验错误（中文原因与下一步做法）。
 type FormatError struct {
 	Reason string
@@ -266,6 +276,22 @@ func NewDOCX(sourceFile, sourceSHA256, sourceTextSHA256 string, entries []Entry)
 	return m
 }
 
+// NewPPTX 构造 version 3 PPTX 对照表：source_format 为 pptx，
+// source_encoding 为空字符串，并携带清理后文字参考指纹。
+func NewPPTX(sourceFile, sourceSHA256, sourceTextSHA256 string, entries []Entry) *Mapping {
+	m := &Mapping{
+		Version:          3,
+		SourceFile:       sourceFile,
+		SourceEncoding:   "",
+		SourceSHA256:     sourceSHA256,
+		SourceFormat:     "pptx",
+		SourceTextSHA256: sourceTextSHA256,
+		Placeholders:     entries,
+	}
+	m.build()
+	return m
+}
+
 func (m *Mapping) build() {
 	m.exact = make(map[string]string, len(m.Placeholders))
 	m.norm = make(map[string]string, len(m.Placeholders))
@@ -300,6 +326,10 @@ func Unmarshal(data []byte) (*Mapping, error) {
 		// 既有 version 1 行为不变。
 	case m.Version == 2:
 		if err := m.validateV2(); err != nil {
+			return nil, err
+		}
+	case m.Version == 3:
+		if err := m.validateV3(); err != nil {
 			return nil, err
 		}
 	default:
@@ -341,6 +371,45 @@ func (m *Mapping) validateV2() error {
 			Reason:    "version 2 mapping 的 source_text_sha256 缺失或格式非法",
 			Advice:    "请重新对 DOCX 脱敏并下载配对 mapping 文件",
 			MessageID: "mapping.v2_text_sha_invalid",
+		}
+	}
+	return nil
+}
+
+func (m *Mapping) validateV3() error {
+	if m.SourceFormat != "pptx" {
+		return &FormatError{
+			Reason:    "version 3 mapping 的 source_format 必须为 pptx",
+			Advice:    "请选择由本工具对 PPTX 脱敏后下载的 version 3 mapping 文件",
+			MessageID: "mapping.v3_format_invalid",
+		}
+	}
+	if m.SourceEncoding != "" {
+		return &FormatError{
+			Reason:    "version 3 mapping 的 source_encoding 必须为空字符串",
+			Advice:    "PPTX 不为整个容器赋予文本编码；请重新对 PPTX 脱敏并下载配对 mapping",
+			MessageID: "mapping.v3_encoding_invalid",
+		}
+	}
+	if !isSHA256Hex(m.SourceSHA256) {
+		return &FormatError{
+			Reason:    "version 3 mapping 的 source_sha256 缺失或格式非法",
+			Advice:    "请重新对 PPTX 脱敏并下载配对 mapping 文件",
+			MessageID: "mapping.v3_source_sha_invalid",
+		}
+	}
+	if !isSHA256Hex(m.SourceTextSHA256) {
+		return &FormatError{
+			Reason:    "version 3 mapping 的 source_text_sha256 缺失或格式非法",
+			Advice:    "请重新对 PPTX 脱敏并下载配对 mapping 文件",
+			MessageID: "mapping.v3_text_sha_invalid",
+		}
+	}
+	if m.Placeholders == nil {
+		return &FormatError{
+			Reason:    "version 3 mapping 缺少 placeholders 条目",
+			Advice:    "请重新对 PPTX 脱敏并下载配对 mapping 文件",
+			MessageID: "mapping.v3_placeholders_missing",
 		}
 	}
 	return nil

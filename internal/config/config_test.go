@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/pandatoufu/data-masking/internal/detector"
+	"github.com/pandatoufu/data-masking/internal/loader"
 )
 
 func TestDefaultsProfiles(t *testing.T) {
@@ -180,5 +181,40 @@ func TestLoadMissingFileFallsBackToDefaults(t *testing.T) {
 	c := Load(filepath.Join(t.TempDir(), "nope.json"))
 	if c.HighFreqThreshold != DefaultHighFreqThreshold {
 		t.Fatalf("缺失文件应回退默认，got %+v", c)
+	}
+}
+
+// 统一默认文件上限：config 与 loader 必须一致，且回退与显式配置语义分明。
+func TestDefaultFileSizeLimitUnified(t *testing.T) {
+	const want int64 = 52428800
+	if DefaultMaxFileSize != want {
+		t.Fatalf("config 默认上限应为 %d 字节，got %d", want, DefaultMaxFileSize)
+	}
+	if loader.DefaultMaxSize != want {
+		t.Fatalf("loader fallback 默认上限应为 %d 字节，got %d", want, loader.DefaultMaxSize)
+	}
+	if Defaults().MaxFileSize != want {
+		t.Fatalf("Defaults() 应携带新默认上限，got %d", Defaults().MaxFileSize)
+	}
+
+	// 无配置文件：回退到新默认值。
+	if got := Load(filepath.Join(t.TempDir(), "missing.json")).MaxFileSize; got != want {
+		t.Fatalf("无配置应回退 %d，got %d", want, got)
+	}
+
+	// 旧显式配置保留：默认值变化不得静默放宽用户设置。
+	old := LoadBytes([]byte(`{"max_file_size": 10485760}`))
+	if old.MaxFileSize != 10485760 {
+		t.Fatalf("显式 10MiB 配置应保留，got %d", old.MaxFileSize)
+	}
+
+	// 显式其他正值同样保留；0/负数沿用原有回退语义。
+	if got := LoadBytes([]byte(`{"max_file_size": 104857600}`)).MaxFileSize; got != 104857600 {
+		t.Fatalf("显式 100MiB 配置应保留，got %d", got)
+	}
+	for _, raw := range []string{`{"max_file_size": 0}`, `{"max_file_size": -1}`} {
+		if got := LoadBytes([]byte(raw)).MaxFileSize; got != want {
+			t.Fatalf("%s 应回退新默认 %d，got %d", raw, want, got)
+		}
 	}
 }

@@ -261,7 +261,6 @@ git -C <export2-dir> rev-list --parents -n 1 HEAD   # exactly one parent: the pr
 Before any write, re-enumerate the remote and the old version objects, and record the expected old `P` full SHA, Release ID and asset IDs/names:
 
 ```sh
-git fetch origin
 git fetch github
 git ls-remote --heads --tags github
 git rev-parse github/github-public     # must equal the recorded P
@@ -282,16 +281,15 @@ gh release delete v1.1 --repo pandatoufu/data-masking --yes
 git -C <export-dir> push github :refs/tags/v1.1
 ```
 
-Create the new annotated tag with the same local noreply identity and push it to both remotes (same-name tags must point at the same tag object):
+Create the new annotated tag with the same local noreply identity and push it to GitHub:
 
 ```sh
 git -C <export-dir> tag -a v1.2.0 -m "data-masking v1.2.0" <R>
 git -C <export-dir> cat-file -p refs/tags/v1.2.0   # tagger is the noreply identity
 git -C <export-dir> push github refs/tags/v1.2.0
-git -C <export-dir> push <forgejo-remote> refs/tags/v1.2.0
 ```
 
-If any step fails, stop: do not restore branches/tags/assets containing old information as a default rollback, and never silently move a published tag. When Forgejo authentication is unavailable, state plainly that the sync is incomplete; do not ask for or print credentials.
+If any step fails, stop: do not restore branches/tags/assets containing old information as a default rollback, and never silently move a published tag.
 
 ### 5. Serial builds from `R` and whitelist packaging
 

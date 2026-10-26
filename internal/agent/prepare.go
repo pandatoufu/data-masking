@@ -356,6 +356,7 @@ func (a *App) deliver(jobID, project string, snap *RuleSnapshot, out *core.MaskO
 		return Response{}, err
 	}
 	warnings = append(warnings, docxWarnings(out.Cleanup, out.Format == "docx")...)
+	warnings = append(warnings, pptxWarnings(out.PPTXCleanup, out.Format == "pptx")...)
 	warnings = append(warnings, auditWarning(out.AuditFailed)...)
 	return Response{
 		SchemaVersion: SchemaVersion,
@@ -430,7 +431,8 @@ func mapCoreError(err error) error {
 		switch {
 		case strings.HasPrefix(he.MessageID, "file.too_large"):
 			return NewError(CodeInputTooLarge, MessageFor(CodeInputTooLarge))
-		case strings.HasPrefix(he.MessageID, "file."), strings.HasPrefix(he.MessageID, "docx."):
+		case strings.HasPrefix(he.MessageID, "file."), strings.HasPrefix(he.MessageID, "docx."),
+			strings.HasPrefix(he.MessageID, "pptx."), strings.HasPrefix(he.MessageID, "mapping."):
 			return NewError(CodeUnsupportedInput, MessageFor(CodeUnsupportedInput))
 		}
 	}

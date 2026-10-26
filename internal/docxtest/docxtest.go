@@ -59,8 +59,9 @@ type Builder struct {
 }
 
 type fixturePart struct {
-	ct   string
-	data []byte
+	ct    string
+	data  []byte
+	store bool // true 时以 Store 写入（文件大小与内容长度近似 1:1，供大文件边界样本使用）
 }
 
 type fixtureRel struct {
@@ -88,6 +89,14 @@ func (b *Builder) AddPart(name, ct string, data []byte) {
 		b.order = append(b.order, name)
 	}
 	b.parts[name] = fixturePart{ct: ct, data: data}
+}
+
+// AddStoredPart 以 ZIP Store 方法添加部件，使文件大小可精确控制（仅供大文件测试 fixture）。
+func (b *Builder) AddStoredPart(name, ct string, data []byte) {
+	if _, ok := b.parts[name]; !ok {
+		b.order = append(b.order, name)
+	}
+	b.parts[name] = fixturePart{ct: ct, data: data, store: true}
 }
 
 // SetMain 设置主文档部件并登记包根关系。
@@ -135,15 +144,20 @@ func (b *Builder) Bytes() []byte {
 	sort.Strings(names)
 	seen := map[string]bool{}
 
-	write := func(name string, data []byte) {
+	writeMethod := func(name string, data []byte, store bool) {
 		if seen[name] {
 			return
 		}
 		seen[name] = true
-		fh := &zip.FileHeader{Name: name, Method: zip.Deflate, Modified: fixed}
+		method := zip.Deflate
+		if store {
+			method = zip.Store
+		}
+		fh := &zip.FileHeader{Name: name, Method: uint16(method), Modified: fixed}
 		w, _ := zw.CreateHeader(fh)
 		_, _ = w.Write(data)
 	}
+	write := func(name string, data []byte) { writeMethod(name, data, false) }
 
 	write("[Content_Types].xml", b.contentTypesXML())
 	for src, rels := range b.rels {
@@ -160,7 +174,7 @@ func (b *Builder) Bytes() []byte {
 		if !ok {
 			continue
 		}
-		write(name, p.data)
+		writeMethod(name, p.data, p.store)
 	}
 	_ = zw.Close()
 	return buf.Bytes()
@@ -319,6 +333,10 @@ type FixtureOptions struct {
 	Bookmark string
 	// TableMerge 额外生成 Word 合法的横向 gridSpan 与纵向 vMerge 表格。
 	TableMerge bool
+	// StoredExtra 以 Store 追加任意未引用部件（路径 → 字节），供精确文件大小边界样本使用。
+	StoredExtra map[string][]byte
+	// ExtraParts 以 Deflate 追加任意未引用部件（路径 → 解压字节），供解压总量样本使用。
+	ExtraParts map[string][]byte
 }
 
 // BuildFullFixture 合成一个覆盖全部声明区域的 DOCX。
@@ -475,6 +493,12 @@ func BuildFullFixture(opts FixtureOptions) ([]byte, error) {
 		}
 		b.AddPart("word/endnotes.xml", ctEndnotes, b.WMLPart("endnotes", inner.String()))
 		b.AddRel("word/document.xml", "rIdEn", b.RelNS()+"/endnotes", "endnotes.xml", false)
+	}
+	for name, data := range opts.ExtraParts {
+		b.AddPart(name, "application/octet-stream", data)
+	}
+	for name, data := range opts.StoredExtra {
+		b.AddStoredPart(name, "application/octet-stream", data)
 	}
 	if c := opts.Comments; c != nil {
 		b.AddPart("word/comments.xml", ctComments, b.CommentsPart(c.Text))

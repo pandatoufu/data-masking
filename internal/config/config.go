@@ -10,8 +10,9 @@ import (
 	"github.com/pandatoufu/data-masking/internal/detector"
 )
 
-// DefaultMaxFileSize 默认大小上限 10MB。
-const DefaultMaxFileSize int64 = 10 * 1024 * 1024
+// DefaultMaxFileSize 是纯文本、DOCX、PPTX 共用的默认文件大小上限（50MiB）。
+// 已有显式正值配置优先，不因默认值变化自动迁移用户配置。
+const DefaultMaxFileSize int64 = 50 * 1024 * 1024
 
 // DefaultHighFreqThreshold 默认高频命中阈值。
 const DefaultHighFreqThreshold = 20

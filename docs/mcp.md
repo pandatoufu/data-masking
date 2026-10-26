@@ -40,8 +40,8 @@ Linux：
 
 ## 输入与规则
 
-- **原件入口固定**：用户将原件放进程序的 `original/`，调用只传单个文件名，如 `report.docx`。`../secret.txt`、`sub/notes.txt`、`C:\x.txt`、`\\server\share\a.txt`、`report.txt:ads`、`NUL.txt`、`notes.txt.` 或结尾空格都会被拒绝；拒绝时不读取越界目标，也不回显私有完整路径。agent 不需要、也不应预先读取原文。
-- **名称范围与核心一致**：`source_name` 与 `response_path` 复用统一名称策略：接受 `.docx` 与纯文本候选（不限后缀、可无后缀，含 `.env`、`.gitignore` 等点文件），按名称拒绝 `pdf`、`doc`/`docm`、`odt`、`rtf`、`ppt`/`pptx`、`xls`/`xlsx` 等已知不支持格式；名称允许不代表内容已验证，读取后仍执行编码、大小与 DOCX 包门禁。项目脱敏副本统一命名为 `input.masked.<ext>`，无后缀与点文件回退 `input.masked.txt`。
+- **原件入口固定**：用户将原件放进程序的 `original/`，调用只传单个文件名，如 `report.docx` 或 `slides.pptx`。`../secret.txt`、`sub/notes.txt`、`C:\x.txt`、`\\server\share\a.txt`、`report.txt:ads`、`NUL.txt`、`notes.txt.` 或结尾空格都会被拒绝；拒绝时不读取越界目标，也不回显私有完整路径。agent 不需要、也不应预先读取原文。
+- **名称范围与核心一致**：`source_name` 与 `response_path` 复用统一名称策略：接受 `.docx`、`.pptx` 与纯文本候选（不限后缀、可无后缀，含 `.env`、`.gitignore` 等点文件），按名称拒绝 `pdf`、`doc`/`docm`、`odt`、`rtf`、`ppt`/`pptm`、`xls`/`xlsx` 等已知不支持格式；名称允许不代表内容已验证，读取后仍执行编码、大小与 DOCX/PPTX 包门禁。项目脱敏副本统一命名为 `input.masked.<ext>`，PPTX 为 `input.masked.pptx`，无后缀与点文件回退 `input.masked.txt`。
 - **项目路径每次显式指定**：`project_path` 必须是用户在本次调用前明确指定的现有绝对目录；不使用 `cwd` 猜测，不把工作区当项目。与程序工作区相同或互为祖先/后代的路径被拒绝。
 - **profile 必填且必须由用户明确选择**：使用本机 `config.json` 中存在的档位 key（内置 `strict` / `balanced` / `minimal` / `custom`，或用户自建项），不会静默回退 `balanced`。用户未明确档位时 agent 必须先问，已明确时不重复询问，不自行猜测或默认 `balanced`。内置 balanced 不处理 email/IP/身份证号；strict 只是启用既有六类规则，**不是安全保证**。
 - `profile` 缺失、空字符串或 `null` 时立即返回 `failed` / `invalid_request`，固定提示：“缺少脱敏档位 profile。请先询问用户选择本机有效档位，明确选择后再调用；不得自行选择档位或原样重复调用。”
@@ -94,9 +94,12 @@ agent 必须转问用户，得到明确答复后才调用 `confirm_operation`，
 - 每个任务只有**一次成功回程**：相同回复字节重试幂等返回原状态；不同字节再还原返回 `invalid_state`，不覆盖成功结果。
 - 以下告警是独立参考信号，不阻断本地结果，也不等同拿错 mapping：
   - `text_mismatch`：DOCX 还原文字与 mapping 的 `SourceTextSHA256` 不同，比较文字而非整个 ZIP 字节。
+  - `pptx_text_mismatch`：PPTX 同格式还原后的文字指纹与原件不同，比较实际还原后的覆盖文字，不代表还原失败或 mapping 配错。
   - `sha_mismatch`：纯文本还原字节 SHA 与原件不同。
   - `cross_format`：跨格式，缺同格式文字基线，如 DOCX 来源提交文本回复或反之。
   - `residual_reverse`：占位符残留；`audit_failed`：审计失败，均为另外独立告警。
+  - `pptx_cleanup`：PPTX 实际删除的批注数（可为 0），不公开人员/部件细节；`pptx_history`：回程不恢复已清除批注；`unchecked_content`：存在未检查内容。
   - 同字节重试保留原告警分类、固定文案及 `audit_failed`，不新增文件、不重复处理。
 - DOCX 只恢复映射文字，不恢复批注、修订历史与 Word 排版；图片、属性等未检查内容不在保证范围。
-- 不承诺发现未知敏感信息，也不承诺语义级无泄露；结果仅表示按规则处理。完整 DOCX 与还原边界见[首页](../README.md#安全与使用边界)。
+- PPTX 采用路径 A：只交付 `input.masked.pptx`，不交付 mapping；模型/客户端必须在项目中编辑该副本并保留占位符，再提交同格式 PPTX 回复。备注保留并双向处理，批注及相关人员信息按支持范围清除且不恢复；PPTX mapping 为 version 3，只接受 PPTX→PPTX 同格式回程。图表、SmartArt、嵌入对象、图片文字、属性与链接目标不检查，刷新可能重新引入未处理值；客户端不具备 PPTX 编辑能力时应如实说明，不能改用纯文本回复冒充路径 A。
+- 不承诺发现未知敏感信息，也不承诺语义级无泄露；结果仅表示按规则处理。完整 DOCX/PPTX 与还原边界见[首页](../README.md#安全与使用边界)。

@@ -24,11 +24,15 @@ const (
 	EncodingGBK  Encoding = "GBK"
 )
 
-// DefaultMaxSize 是默认的单文件大小上限（10MB）。
-const DefaultMaxSize int64 = 10 * 1024 * 1024
+// DefaultMaxSize 是 fallback 使用的单文件大小上限（50MiB）。
+// 与 config.DefaultMaxFileSize 保持一致，由测试断言避免两处漂移。
+const DefaultMaxSize int64 = 50 * 1024 * 1024
 
-// docxExt 是唯一进入专用 DOCX 文档流程的最终扩展名（大小写不敏感）。
+// docxExt 是进入专用 DOCX 文档流程的最终扩展名（大小写不敏感）。
 const docxExt = ".docx"
+
+// pptxExt 是进入专用 PPTX 文档流程的最终扩展名（大小写不敏感）。
+const pptxExt = ".pptx"
 
 // NameKind 是统一名称候选策略的分类结果。
 type NameKind string
@@ -36,6 +40,8 @@ type NameKind string
 const (
 	// NameKindDocx 表示最终扩展名为 .docx，进入 DOCX 包门禁。
 	NameKindDocx NameKind = "docx"
+	// NameKindPPTX 表示最终扩展名为 .pptx，进入 PPTX 包门禁。
+	NameKindPPTX NameKind = "pptx"
 	// NameKindDenied 表示名称属于已知不支持格式的有限拒绝集合。
 	NameKindDenied NameKind = "denied"
 	// NameKindText 表示其余名称，作为纯文本候选交由大小与内容门禁。
@@ -49,7 +55,7 @@ var deniedExts = map[string]bool{
 	// 文档类：不解析、不转换、不保格式。
 	".pdf": true, ".doc": true, ".docm": true, ".dot": true, ".dotx": true, ".dotm": true,
 	".odt": true, ".ott": true, ".fodt": true, ".rtf": true,
-	".ppt": true, ".pptx": true, ".pptm": true, ".pot": true, ".potx": true, ".potm": true,
+	".ppt": true, ".pptm": true, ".pot": true, ".potx": true, ".potm": true,
 	".pps": true, ".ppsx": true, ".ppsm": true, ".odp": true, ".otp": true, ".fodp": true,
 	".xls": true, ".xlsx": true, ".xlsm": true, ".xlsb": true, ".xlt": true, ".xltx": true, ".xltm": true,
 	".ods": true, ".ots": true, ".fods": true,
@@ -111,13 +117,16 @@ type Document struct {
 	Lines    []Line
 }
 
-// ClassifyName 按统一候选策略分类名称：.docx 优先分流入专用文档流程（单段点文件 .docx 亦然），
-// 已知不支持格式按最终扩展名拒绝，其余（含无后缀与 .env 等点文件）为纯文本候选。
-// 只按名称判断，不代表内容已验证。
+// ClassifyName 按统一候选策略分类名称：.docx/.pptx 优先分流入专用文档流程
+// （单段点文件 .docx/.pptx 亦然），已知不支持格式按最终扩展名拒绝，其余
+// （含无后缀与 .env 等点文件）为纯文本候选。只按名称判断，不代表内容已验证。
 func ClassifyName(name string) NameKind {
 	ext := finalExt(name)
 	if ext == docxExt {
 		return NameKindDocx
+	}
+	if ext == pptxExt {
+		return NameKindPPTX
 	}
 	if deniedExts[ext] {
 		return NameKindDenied
@@ -128,21 +137,24 @@ func ClassifyName(name string) NameKind {
 // IsDocxName 报告名称是否按最终扩展名进入 DOCX 流程（大小写不敏感）。
 func IsDocxName(name string) bool { return finalExt(name) == docxExt }
 
-// IsTextCandidate 报告名称是否为纯文本候选（非 DOCX、非已知拒绝格式）。
+// IsPPTXName 报告名称是否按最终扩展名进入 PPTX 流程（大小写不敏感）。
+func IsPPTXName(name string) bool { return finalExt(name) == pptxExt }
+
+// IsTextCandidate 报告名称是否为纯文本候选（非 DOCX/PPTX、非已知拒绝格式）。
 func IsTextCandidate(name string) bool { return ClassifyName(name) == NameKindText }
 
-// IsDocumentCandidate 报告名称是否可作为文档入口候选（DOCX 或纯文本候选）。
+// IsDocumentCandidate 报告名称是否可作为文档入口候选（DOCX、PPTX 或纯文本候选）。
 func IsDocumentCandidate(name string) bool { return ClassifyName(name) != NameKindDenied }
 
 // ValidateFileName 按统一候选策略校验文档名称：拒绝已知不支持的格式名称，
-// 接受 DOCX 与纯文本候选（含无后缀、点文件）。名称允许不代表内容已经验证。
+// 接受 DOCX、PPTX 与纯文本候选（含无后缀、点文件）。名称允许不代表内容已经验证。
 func ValidateFileName(name string) error {
 	if ClassifyName(name) != NameKindDenied {
 		return nil
 	}
 	ext := finalExt(name)
 	return humanErrPres(fmt.Sprintf("不支持的文件格式 %q", ext),
-		"本工具只做纯文本替换与 .docx 处理；请用原程序转换为纯文本（UTF-8/GBK）或另存为 .docx 后再试",
+		"本工具只做纯文本替换、.docx 与 .pptx 处理；请用原程序转换为纯文本（UTF-8/GBK）或另存为 .docx/.pptx 后再试",
 		"file.unsupported_format", map[string]any{"ext": ext})
 }
 
@@ -282,4 +294,15 @@ func decodeGBKStrict(data []byte) (string, bool) {
 		}
 	}
 	return string(out), true
+}
+
+// OverLimit 报告流式读取已判定超过有效上限：只给出上限，不伪造未保留的完整字节数。
+// 语义与 ValidateSize 的 file.too_large 一致，用于 GUI 传输入口在构建快照阶段提前判定。
+func OverLimit(limit int64) error {
+	if limit <= 0 {
+		limit = DefaultMaxSize
+	}
+	return humanErrPres(fmt.Sprintf("文件大小超过上限 %s", humanSize(limit)),
+		"请拆分文件，或在配置中调高大小上限后重试", "file.too_large_stream",
+		map[string]any{"limit": humanSize(limit)})
 }

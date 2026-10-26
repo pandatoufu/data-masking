@@ -34,7 +34,7 @@ func TestValidateSourceNameRejectionTable(t *testing.T) {
 		{"archive.zip", CodeUnsupportedInput},
 		{"notes.rtf", CodeUnsupportedInput},
 		{"report.odt", CodeUnsupportedInput},
-		{"slides.pptx", CodeUnsupportedInput},
+		{"slides.pptm", CodeUnsupportedInput},
 		{"data.pdf", CodeUnsupportedInput},
 		{"image.png", CodeUnsupportedInput},
 	}
@@ -51,7 +51,7 @@ func TestValidateSourceNameRejectionTable(t *testing.T) {
 		})
 	}
 	accept := []string{
-		"report.docx", "notes.txt", "合同.md", "my file.log", "a.b.py", "日志.js",
+		"report.docx", "slides.pptx", "报告.PPTX", "notes.txt", "合同.md", "my file.log", "a.b.py", "日志.js",
 		"data.csv", "data.json", "config.yaml", "main.go", "notes.xyz",
 		"README", "readme", ".env", ".gitignore", ".env.local",
 	}

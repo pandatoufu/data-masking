@@ -174,15 +174,10 @@ func TestRestoreRejectsBadResponseBeforePending(t *testing.T) {
 	if err := os.WriteFile(badRTF, []byte("{\\rtf1 text}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	badPPTX := filepath.Join(project, "reply.pptx")
-	if err := os.WriteFile(badPPTX, []byte("pptx"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	cases := map[string]string{
 		"cross-project": outside,
 		"bad-ext":       badExt,
 		"bad-rtf":       badRTF,
-		"bad-pptx":      badPPTX,
 		"missing":       filepath.Join(project, "missing.txt"),
 		"relative":      "reply.txt",
 	}

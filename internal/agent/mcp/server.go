@@ -38,7 +38,12 @@ const securityGuidance = "安全边界（合作式软约束，不是 OS 沙箱�
 
 // instructions 是 initialize 返回的固定说明：工具集合与安全指引均为审定静态文本。
 const instructions = "本服务只提供 prepare_document、confirm_operation、restore_document 三个工具：" +
-	"在本地脱敏 original/ 中的单个文件，并把获准交付的脱敏副本送入用户项目。" + securityGuidance
+	"在本地脱敏 original/ 中的单个文件，并把获准交付的脱敏副本送入用户项目。" +
+	"支持纯文本、DOCX 与普通 PPTX；PPTX 采用路径 A（PPTX 原件 → 脱敏 PPTX → 项目内模型编辑 → 本地还原 PPTX），" +
+	"只处理原生标题/正文/文本框/组合形状/表格/隐藏页/版式/母版/备注文字，批注及相关人员信息按支持范围清除，备注保留。" +
+	"图表、SmartArt、嵌入对象、图片文字、属性与链接目标不检查，刷新可能重新引入未处理值。" +
+	"客户端自身必须具备编辑 PPTX 并保留占位符的能力；不支持时保持未验证，不要用纯文本回复冒充 PPTX 回程。" +
+	securityGuidance
 
 // 固定工具描述：要求 agent 转问用户、披露规则边界，且不引导读取原文或词库。
 const (
@@ -47,6 +52,7 @@ const (
 		"内置档位为 strict/balanced/minimal/custom，其中 custom 是现有显示别名；本机配置可覆盖内置项或自建档位，因此内置名称不是完整有效列表，实际本机配置优先。" +
 		"自定义词只来自程序目录 cards/ 直属 TXT（每行一词）；custom 启用时必须已有有效 TXT，关闭时不读取词库；不接受调用方提交敏感词或原文。" +
 		"balanced 不处理 email/IP/身份证号；规则匹配不构成语义级无泄露保证。" +
+		"PPTX 仅支持普通 .pptx 与同格式 PPTX 回复；宏、模板/放映格式、加密或签名文稿会被拒绝。" +
 		"若返回确认态，必须询问用户并在得到明确答复后调用 confirm_operation；不得自行批准。" +
 		securityGuidance
 	descConfirm = "提交用户对当前任务的确认决定。" +
@@ -57,6 +63,7 @@ const (
 	descRestore = "把项目内的一份回复文件在本地用该任务配对的 mapping 还原。" +
 		"response_path 必须是该任务 project_path 子树内的常规文件；结果只保存在本机，不返回还原正文。" +
 		"回程只使用任务记录的 mapping，不依赖当前 cards 词库；每个任务只接受一次成功回程。" +
+		"DOCX 任务按既有跨格式边界处理；PPTX 任务只接受同格式 PPTX 回复，PPTX mapping 不能还原文本/DOCX，文本/DOCX mapping 也不能还原 PPTX。" +
 		securityGuidance
 )
 
@@ -85,7 +92,7 @@ var (
 	schemaPrepare = json.RawMessage(`{
   "type": "object",
   "properties": {
-    "source_name": {"type": "string", "description": "original 目录下的单个文件名，例如 report.docx"},
+    "source_name": {"type": "string", "description": "original 目录下的单个文件名，例如 report.docx 或 slides.pptx"},
     "project_path": {"type": "string", "description": "用户指定的现有绝对项目目录"},
     "profile": {"type": "string", "description": "本机配置中有效的档位名，例如内置 strict/balanced/minimal/custom（custom 可能映射到本机自建项）。用户未明确档位时必须先询问用户并按用户的明确选择填写；已明确时不重复询问；不要猜测档位，也不要默认 balanced；不要为确认档位而读取 config.json。"}
   },

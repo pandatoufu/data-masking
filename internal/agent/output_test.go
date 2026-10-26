@@ -174,7 +174,8 @@ func TestFailureCodeSetFixed(t *testing.T) {
 func TestWarningKindSetFixed(t *testing.T) {
 	want := []string{
 		"residual_forward", "residual_reverse", "sha_mismatch", "text_mismatch", "cross_format",
-		"docx_history", "docx_cleanup", "unchecked_content", "audit_failed", "cleanup_warning",
+		"docx_history", "docx_cleanup", "pptx_history", "pptx_cleanup", "pptx_text_mismatch",
+		"unchecked_content", "audit_failed", "cleanup_warning",
 	}
 	if len(allowedWarningKinds) != len(want) {
 		t.Fatalf("告警 kind 数量应固定：%d", len(allowedWarningKinds))

@@ -20,12 +20,16 @@ var catalog = map[string]map[Lang]string{
 
 	// ---- loader：文件门禁与解码 ----
 	"file.unsupported_format": {
-		ZH: "不支持的文件格式 {ext}。本工具只做纯文本替换与 .docx 处理；请用原程序转换为纯文本（UTF-8/GBK）或另存为 .docx 后再试。",
-		EN: "Unsupported file format {ext}. This tool only performs plain-text replacement and .docx processing; convert it to plain text (UTF-8/GBK) with the original program or save it as .docx and try again.",
+		ZH: "不支持的文件格式 {ext}。本工具只做纯文本替换、.docx 与 .pptx 处理；请用原程序转换为纯文本（UTF-8/GBK）或另存为 .docx/.pptx 后再试。",
+		EN: "Unsupported file format {ext}. This tool only performs plain-text replacement, .docx and .pptx processing; convert it to plain text (UTF-8/GBK) with the original program or save it as .docx/.pptx and try again.",
 	},
 	"file.too_large": {
 		ZH: "文件大小 {size} 超过上限 {limit}。请拆分文件，或在配置中调高大小上限后重试。",
 		EN: "File size {size} exceeds the limit {limit}. Split the file or raise the size limit in the configuration, then retry.",
+	},
+	"file.too_large_stream": {
+		ZH: "文件大小超过上限 {limit}。请拆分文件，或在配置中调高大小上限后重试。",
+		EN: "The file size exceeds the limit {limit}. Split the file or raise the size limit in the configuration, then retry.",
 	},
 	"decode.binary_or_utf16": {
 		ZH: "检测到二进制或 UTF-16 内容，不是受支持的纯文本。请用纯文本编辑器另存为 UTF-8 或 GBK 后再试。",
@@ -95,6 +99,10 @@ var catalog = map[string]map[Lang]string{
 		ZH: "DOCX 原文已含占位符文法（如 {hit}，位于 {part} 第 {paragraph} 段第 {segment} 片段），与脱敏占位符冲突。请先移除或替换原文中的占位符样式文本（形如 [PHONE_1]）后再试。",
 		EN: "The DOCX source contains placeholder syntax (e.g. {hit} in {part}, paragraph {paragraph}, segment {segment}), which conflicts with masking placeholders. Remove or replace placeholder-like text (such as [PHONE_1]) and retry.",
 	},
+	"collision.grammar_pptx": {
+		ZH: "PPTX 原文已含占位符文法（如 {hit}，位于 {part} 第 {paragraph} 段第 {segment} 片段），与脱敏占位符冲突。请先移除或替换原文中的占位符样式文本（形如 [PHONE_1]）后再试。",
+		EN: "The PPTX source contains placeholder syntax (e.g. {hit} in {part}, paragraph {paragraph}, segment {segment}), which conflicts with masking placeholders. Remove or replace placeholder-like text (such as [PHONE_1]) and retry.",
+	},
 	"preview.required": {
 		ZH: "自定义词命中次数过高，需先预览确认。本次词：{extra}；常备词：{builtin}。",
 		EN: "Some custom words appear too often and need confirmation. Session words: {extra}; built-in words: {builtin}.",
@@ -142,12 +150,16 @@ var catalog = map[string]map[Lang]string{
 		EN: "An operation is already in progress. Wait for the current processing or save to finish and try again.",
 	},
 	"http.mask_file_missing": {
-		ZH: "缺少待脱敏文件。请在脱敏页选择纯文本或 .docx 文件。",
-		EN: "The file to mask is missing. Choose a plain-text or .docx file on the mask view.",
+		ZH: "缺少待脱敏文件。请在脱敏页选择纯文本、.docx 或 .pptx 文件。",
+		EN: "The file to mask is missing. Choose a plain-text, .docx or .pptx file on the mask view.",
 	},
 	"http.file_read_failed": {
 		ZH: "读取文件失败。请重试。",
 		EN: "Reading the file failed. Please retry.",
+	},
+	"http.form_cleanup_failed": {
+		ZH: "处理完成后未能清理表单临时资源。请重试；如问题持续，请重启应用后再试。",
+		EN: "Temporary form resources could not be cleaned up after processing. Retry; if the problem persists, restart the app and try again.",
 	},
 	"http.mapping_missing": {
 		ZH: "缺少 mapping 文件。请选择本机上次脱敏后下载的 .mapping.json 文件。",
@@ -194,6 +206,26 @@ var catalog = map[string]map[Lang]string{
 	"mapping.v2_text_sha_invalid": {
 		ZH: "version 2 mapping 的 source_text_sha256 缺失或格式非法。请重新对 DOCX 脱敏并下载配对 mapping 文件。",
 		EN: "The source_text_sha256 of a version 2 mapping is missing or malformed. Re-mask the DOCX and download its paired mapping file.",
+	},
+	"mapping.v3_format_invalid": {
+		ZH: "version 3 mapping 的 source_format 必须为 pptx。请选择由本工具对 PPTX 脱敏后下载的 version 3 mapping 文件。",
+		EN: "The source_format of a version 3 mapping must be pptx. Choose the version 3 mapping downloaded after masking a PPTX with this tool.",
+	},
+	"mapping.v3_encoding_invalid": {
+		ZH: "version 3 mapping 的 source_encoding 必须为空字符串。PPTX 不为整个容器赋予文本编码；请重新对 PPTX 脱敏并下载配对 mapping。",
+		EN: "The source_encoding of a version 3 mapping must be an empty string. PPTX has no single text encoding; re-mask the PPTX and download its paired mapping.",
+	},
+	"mapping.v3_source_sha_invalid": {
+		ZH: "version 3 mapping 的 source_sha256 缺失或格式非法。请重新对 PPTX 脱敏并下载配对 mapping 文件。",
+		EN: "The source_sha256 of a version 3 mapping is missing or malformed. Re-mask the PPTX and download its paired mapping file.",
+	},
+	"mapping.v3_text_sha_invalid": {
+		ZH: "version 3 mapping 的 source_text_sha256 缺失或格式非法。请重新对 PPTX 脱敏并下载配对 mapping 文件。",
+		EN: "The source_text_sha256 of a version 3 mapping is missing or malformed. Re-mask the PPTX and download its paired mapping file.",
+	},
+	"mapping.v3_placeholders_missing": {
+		ZH: "version 3 mapping 缺少 placeholders 条目。请重新对 PPTX 脱敏并下载配对 mapping 文件。",
+		EN: "The version 3 mapping is missing its placeholders list. Re-mask the PPTX and download its paired mapping file.",
 	},
 	"mapping.generic_invalid": {
 		ZH: "mapping 文件无法解析。请选择本机上次脱敏后下载的 .mapping.json 文件。",
@@ -258,6 +290,68 @@ var catalog = map[string]map[Lang]string{
 		EN: "The output package structure/asset validation failed, so no file was delivered. Retry, or use another file.",
 	},
 
+	// ---- PPTX 包门禁与文字处理 ----
+	"pptx.not_pptx": {
+		ZH: "文件不是有效的 PPTX 演示文稿。请在 PowerPoint 中另存为普通、未加密的 .pptx 后重试。",
+		EN: "The file is not a valid PPTX presentation. Save it as a normal, unencrypted .pptx in PowerPoint and retry.",
+	},
+	"pptx.encrypted_ole": {
+		ZH: "检测到加密的演示文稿（OLE 复合文件），无法处理。请先解除加密并另存为普通 .pptx 后重试。",
+		EN: "An encrypted presentation (OLE compound file) was detected and cannot be processed. Remove encryption, save as a normal .pptx, and retry.",
+	},
+	"pptx.zip_budget": {
+		ZH: "PPTX 包超出安全预算（条目数量/单部件大小/解压总量/压缩方式）。请精简演示文稿后另存为新的 .pptx 再试。",
+		EN: "The PPTX package exceeds the safety budget (entry count, single-part size, total decompressed size, or compression method). Trim the presentation, save as a new .pptx, and retry.",
+	},
+	"pptx.part_name_invalid": {
+		ZH: "PPTX 含非法部件名。ZIP 部件名必须为包内相对路径且不含冒号、反斜杠或 . / ..。请重新另存 .pptx。",
+		EN: "The PPTX contains an invalid part name. ZIP part names must be package-relative and contain no colon, backslash, or . / .. segments. Re-save the .pptx.",
+	},
+	"pptx.content_types_invalid": {
+		ZH: "[Content_Types].xml 声明不完整或重复。这不是有效的 PPTX 包；请在 PowerPoint 中另存为新的 .pptx 后重试。",
+		EN: "[Content_Types].xml is incomplete or duplicated. This is not a valid PPTX package; re-save it as a new .pptx in PowerPoint and retry.",
+	},
+	"pptx.relationship_invalid": {
+		ZH: "PPTX 关系部件命名空间/声明/ID/主列表不正确。文件结构异常；请在 PowerPoint 中另存为新的 .pptx 后重试。",
+		EN: "The PPTX relationships part has an invalid namespace, declaration, ID, or slide list. Re-save it as a new .pptx in PowerPoint and retry.",
+	},
+	"pptx.missing_part": {
+		ZH: "PPTX 缺少必要部件或内部关系目标。文件结构损坏；请在 PowerPoint 中另存为新的 .pptx 后重试。",
+		EN: "The PPTX is missing a required part or internal relationship target. Re-save it as a new .pptx in PowerPoint and retry.",
+	},
+	"pptx.macro_unsupported": {
+		ZH: "不支持宏演示文稿（.pptm / vbaProject）。请另存为不含宏的普通 .pptx 后重试。",
+		EN: "Macro-enabled presentations (.pptm / vbaProject) are not supported. Save as a macro-free .pptx and retry.",
+	},
+	"pptx.digital_signature_unsupported": {
+		ZH: "不支持含数字签名的演示文稿包。请移除签名后另存为 .pptx 再试。",
+		EN: "Presentations with digital signatures are not supported. Remove the signature, save as .pptx, and retry.",
+	},
+	"pptx.comment_family_unsupported": {
+		ZH: "检测到不支持的批注家族扩展（{what}）。请先在 PowerPoint 中删除全部批注并另存为新的 .pptx 后再试。",
+		EN: "An unsupported comment-family extension was detected ({what}). Delete all comments in PowerPoint, save as a new .pptx, and retry.",
+	},
+	"pptx.xml_parse_failed": {
+		ZH: "PPTX 部件 XML 解析失败。文件可能损坏；请在 PowerPoint 中另存为新的 .pptx 后重试。",
+		EN: "Parsing a PPTX part's XML failed. The file may be damaged; re-save it as a new .pptx in PowerPoint and retry.",
+	},
+	"pptx.text_unsupported": {
+		ZH: "PPTX 含无法可靠枚举的原生文字结构，未执行脱敏。请在 PowerPoint 中把该内容转换为普通文本框或删除后另存为新的 .pptx 再试。",
+		EN: "The PPTX contains native text that cannot be reliably enumerated, so masking was not performed. Convert it to a normal text box or remove it in PowerPoint, save as a new .pptx, and retry.",
+	},
+	"pptx.output_validation_failed": {
+		ZH: "PPTX 输出包结构/资源/文字校验未通过，未交付文件。请重试，或改用其他文件。",
+		EN: "The PPTX output package failed structure/asset/text validation, so no file was delivered. Retry, or use another file.",
+	},
+	"pptx.combination_unsupported": {
+		ZH: "不支持的格式组合：本期 PPTX 仅支持 PPTX 原件与 PPTX 回复的同格式闭环。请勿用 PPTX mapping 还原文本/DOCX，也不要用旧文本/DOCX mapping 还原 PPTX。",
+		EN: "Unsupported format combination: PPTX currently supports only a same-format PPTX source and PPTX reply. Do not restore text/DOCX with a PPTX mapping, or restore PPTX with an older text/DOCX mapping.",
+	},
+	"pptx.internal": {
+		ZH: "PPTX 处理内部状态异常。请重试；若持续出现请报告此问题。",
+		EN: "An internal PPTX processing state is invalid. Retry; report the problem if it persists.",
+	},
+
 	// ---- 警告（非阻断）----
 	"warning.residual_forward": {
 		ZH: "检测到输出中仍有 {count} 处命中启用规则的内容（首处：第 {line} 行第 {column} 列）。注意：该校验仅验证规则覆盖率，不构成语义级无泄露保证。如仍需交付，可强制导出；建议检查输出中的残留内容。",
@@ -290,6 +384,22 @@ var catalog = map[string]map[Lang]string{
 	"warning.text_mismatch": {
 		ZH: "无法确证文本一致：还原后 DOCX 的清理后覆盖文字与 mapping 记录的文字参考不一致。该提示仅供参考，不阻断导出。",
 		EN: "Text consistency cannot be confirmed: the restored DOCX's cleaned covered text differs from the text reference recorded in the mapping. This is advisory only and does not block export.",
+	},
+	"warning.residual_forward_pptx": {
+		ZH: "检测到输出中仍有 {count} 处命中启用规则的内容（首处：{part} 第 {paragraph} 段第 {segment} 片段第 {column} 字符）。注意：该校验仅验证规则覆盖率，不构成语义级无泄露保证。如仍需交付，可强制导出；建议检查输出中的残留内容。",
+		EN: "{count} places matching enabled rules remain in the output (first at {part}, paragraph {paragraph}, segment {segment}, character {column}). Note: this check only verifies rule coverage and is not a semantic no-leak guarantee. If you still need to deliver, you may export anyway; review the remaining content.",
+	},
+	"warning.residual_reverse_pptx": {
+		ZH: "还原后仍存在占位符残留，疑似使用了与文本不配对的 mapping 文件（共 {count} 处，首处：{part} 第 {paragraph} 段第 {segment} 片段第 {column} 字符 {text}）。本工具只做大小写/全角的 best-effort 匹配，无法找回被 LLM 改写或翻译的占位符；请确认 mapping 来源为本机上次下载的配对文件。",
+		EN: "Placeholders remain after restore; the mapping may not match the text ({count} places; first at {part}, paragraph {paragraph}, segment {segment}, character {column}: {text}). This tool only does case/full-width best-effort matching and cannot recover placeholders rewritten or translated by the LLM; confirm the mapping came from the paired file downloaded on this machine.",
+	},
+	"warning.pptx_history": {
+		ZH: "注意：本工具已按支持范围清除 PPTX 批注及相关人员信息；回程只恢复映射文字，不能恢复已清除的批注或原始排版。",
+		EN: "Note: this tool removed PPTX comments and related people information within the supported scope; restore only recovers mapped text and cannot restore the cleared comments or original layout.",
+	},
+	"warning.pptx_text_mismatch": {
+		ZH: "无法确证文本一致：还原后 PPTX 的清理后覆盖文字与 mapping 记录的文字参考不一致。该提示仅供参考，不阻断导出。",
+		EN: "Text consistency cannot be confirmed: the restored PPTX's cleaned covered text differs from the text reference recorded in the mapping. This is advisory only and does not block export.",
 	},
 
 	// ---- 审计 ----
@@ -626,20 +736,20 @@ var catalog = map[string]map[Lang]string{
 		EN: "Language",
 	},
 	"ui.select_file": {
-		ZH: "选择文件（纯文本不限后缀，或 .docx）",
-		EN: "Choose a file (any plain-text extension or none, or .docx)",
+		ZH: "选择文件（纯文本不限后缀，或 .docx/.pptx）",
+		EN: "Choose a file (any plain-text extension or none, or .docx/.pptx)",
 	},
 	"ui.pick_file": {
 		ZH: "选择文件",
 		EN: "Choose file",
 	},
 	"ui.doc_formats_text": {
-		ZH: "支持纯文本（不限后缀，可无后缀；UTF-8/GBK）与 Word .docx。",
-		EN: "Accepts plain text (any extension or none; UTF-8/GBK) and Word .docx.",
+		ZH: "支持纯文本（不限后缀，可无后缀；UTF-8/GBK）与 Word .docx、PowerPoint .pptx。",
+		EN: "Accepts plain text (any extension or none; UTF-8/GBK), Word .docx, and PowerPoint .pptx.",
 	},
 	"ui.doc_formats_examples": {
-		ZH: "纯文本示例：TXT、Markdown、CSV、JSON、YAML、代码、日志；不支持 PDF、ODT、RTF、PPTX、XLSX 等文档格式。",
-		EN: "Plain-text examples: TXT, Markdown, CSV, JSON, YAML, code, logs. PDF, ODT, RTF, PPTX, XLSX and similar document formats are not supported.",
+		ZH: "纯文本示例：TXT、Markdown、CSV、JSON、YAML、代码、日志；不支持 PDF、ODT、RTF、XLSX、PPT/PPTM 等格式。PPTX 仅处理原生文字并保留可编辑结构，不保证视觉排版不变。",
+		EN: "Plain-text examples: TXT, Markdown, CSV, JSON, YAML, code, logs. PDF, ODT, RTF, XLSX, PPT/PPTM and similar formats are not supported. PPTX handles native text and keeps editable structure, without promising identical visual layout.",
 	},
 	"ui.doc_formats_syntax": {
 		ZH: "按纯文本替换，不保证代码或结构化数据替换后的语法有效。",
@@ -672,6 +782,10 @@ var catalog = map[string]map[Lang]string{
 	"ui.docx_unchecked_short": {
 		ZH: "图片及属性、字段指令、绑定源、链接目标、图表/SmartArt、附件未检查。",
 		EN: "Images and document properties, field codes, binding sources, link targets, charts/SmartArt, and attachments are not checked.",
+	},
+	"ui.pptx_unchecked_short": {
+		ZH: "图表及数据源、SmartArt、嵌入对象、图片文字、属性、字段指令与链接目标未检查；刷新可能重新引入未处理值。",
+		EN: "Charts and data sources, SmartArt, embedded objects, text in images, properties, field codes, and link targets are not checked; refreshing may reintroduce unprocessed values.",
 	},
 	"ui.drop_hint": {
 		ZH: "点击选择或拖入单个文件",
@@ -981,6 +1095,10 @@ var catalog = map[string]map[Lang]string{
 		ZH: "输出格式：DOCX（不对整个容器显示文本编码）",
 		EN: "Output format: DOCX (no single text encoding for the container)",
 	},
+	"ui.output_pptx": {
+		ZH: "输出格式：PPTX（不对整个容器显示文本编码）",
+		EN: "Output format: PPTX (no single text encoding for the container)",
+	},
 	"ui.output_text": {
 		ZH: "输出格式：文本（{encoding}）",
 		EN: "Output format: text ({encoding})",
@@ -988,6 +1106,10 @@ var catalog = map[string]map[Lang]string{
 	"ui.input_docx": {
 		ZH: "文档格式：DOCX（不对整个容器显示文本编码）",
 		EN: "Document format: DOCX (no single text encoding for the container)",
+	},
+	"ui.input_pptx": {
+		ZH: "文档格式：PPTX（保留可编辑结构；不保证视觉排版不变）",
+		EN: "Document format: PPTX (keeps editable structure; visual layout is not guaranteed to stay identical)",
 	},
 	"ui.detected_encoding": {
 		ZH: "检出编码：{encoding}",
@@ -1016,6 +1138,26 @@ var catalog = map[string]map[Lang]string{
 	"ui.cleanup_resources": {
 		ZH: "清理历史专属资源 {count} 个",
 		EN: "Cleaned {count} history-only resources",
+	},
+	"ui.cleanup_pptx_title": {
+		ZH: "本次 PPTX 清理结果：",
+		EN: "PPTX cleanup result:",
+	},
+	"ui.cleanup_pptx_comments": {
+		ZH: "删除批注 {count} 处",
+		EN: "Deleted {count} comments",
+	},
+	"ui.cleanup_pptx_people": {
+		ZH: "移除批注人员部件 {count} 个",
+		EN: "Removed {count} comment-people parts",
+	},
+	"ui.cleanup_pptx_parts": {
+		ZH: "移除批注家族部件 {count} 个",
+		EN: "Removed {count} comment-family parts",
+	},
+	"ui.cleanup_pptx_resources": {
+		ZH: "清理批注专属资源 {count} 个",
+		EN: "Cleaned {count} comment-only resources",
 	},
 	"ui.narrow_result_hint": {
 		ZH: "结果已更新，请查看结果区。",

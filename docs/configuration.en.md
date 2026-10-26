@@ -13,7 +13,7 @@ This is separate from the [workspace beside the executable](usage.en.md#workspac
 
 ```json
 {
-  "max_file_size": 10485760,
+  "max_file_size": 52428800,
   "high_freq_threshold": 20,
   "idle_timeout_minutes": 30,
   "custom_words": ["Example project codename"],
@@ -27,7 +27,7 @@ This is separate from the [workspace beside the executable](usage.en.md#workspac
 
 | Field | Meaning |
 | --- | --- |
-| `max_file_size` | File size limit in bytes; default 10485760 (10 MiB) |
+| `max_file_size` | Per-file byte limit shared by plain text, DOCX and PPTX; default 52428800 (50 MiB); an explicit positive value wins |
 | `high_freq_threshold` | High-frequency word confirmation threshold; default 20 |
 | `idle_timeout_minutes` | Legacy compatibility field; the desktop app does not automatically exit based on it |
 | `custom_words` | Persistent GUI words, used alongside typed/imported words for the current run; headless ignores this field entirely and reads direct-child TXT files in `cards/` instead |
@@ -35,6 +35,8 @@ This is separate from the [workspace beside the executable](usage.en.md#workspac
 
 - The six rule keys are `phone`, `idcard`, `email`, `ip`, `api_key`, `custom`. The GUI's reserved custom token `__custom` cannot be overridden by configuration.
 - GUI retains its compatible default fallback behavior if configuration cannot be read or JSON is invalid; only positive size and threshold values override defaults.
+- `max_file_size` controls the pre-upload file size only; GUI file picking, fixed-directory quick reads and headless document input all use the same effective value. A configuration that already contains an old value such as `10485760` keeps that limit and is never migrated or overwritten because the default changed; adjust it locally if you want the 50 MiB range.
+- DOCX/PPTX extraction is fixed at 200 MiB (209715200 bytes) per package. It is not configured by `max_file_size` and is not a process memory limit; see the [usage guide](usage.en.md#supported-file-formats-and-limits).
 - Headless uses defaults if no configuration exists. If a file exists but is unreadable, has invalid JSON, has a non-object top level or contains invalid effective fields, the operation is rejected rather than silently changing policy. `custom_words` is ignored regardless of its type.
 - MCP profiles must be explicitly selected by the user and valid locally; do not have the agent read configuration to discover them. For cards encoding, word limits, batch rejection and custom toggling, see [MCP inputs and rules](mcp.en.md#inputs-and-rules).
 

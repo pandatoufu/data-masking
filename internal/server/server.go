@@ -61,6 +61,10 @@ type Server struct {
 	// 随业务成功响应下发前端携带，避免前端二次 RPC 读取未来 token 或仅靠 fire-and-forget。
 	onArtifacts func() uint64
 
+	// formCleanup 是预解析 multipart 临时资源清理钩子；nil 时使用 cleanupMultipart。
+	// 仅用于测试注入清理失败，正常路径不依赖它。
+	formCleanup func(*http.Request) error
+
 	lastActivity atomic.Int64
 	done         chan struct{}
 	once         sync.Once
@@ -467,82 +471,73 @@ func (s *Server) endOperation() {
 }
 
 func (s *Server) handleMask(w http.ResponseWriter, r *http.Request) {
+	status, payload := s.maskResult(r)
+	s.respondForm(w, r, status, payload)
+}
+
+// maskResult 处理 /api/mask；只返回状态与响应体，响应写出前统一清理预解析临时资源。
+func (s *Server) maskResult(r *http.Request) (int, map[string]any) {
 	if r.Method != http.MethodPost {
-		writeErrPres(w, http.StatusMethodNotAllowed, "仅支持 POST", "请从脱敏页面执行操作。",
+		return http.StatusMethodNotAllowed, errPayload("仅支持 POST", "请从脱敏页面执行操作。",
 			i18n.P("http.method_post_only", map[string]any{"scope": "脱敏接口"}))
-		return
 	}
 	if !s.beginOperation() {
-		writeErrPres(w, http.StatusConflict, "有操作正在进行", "请等待当前处理或保存完成后再试。",
+		return http.StatusConflict, errPayload("有操作正在进行", "请等待当前处理或保存完成后再试。",
 			i18n.P("http.operation_busy", nil))
-		return
 	}
 	defer s.endOperation()
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		writeErrPres(w, http.StatusBadRequest, "表单解析失败", "请重新选择文件后再试。", i18n.P("http.form_parse_failed", nil))
-		return
+
+	fd, ferr := parseForm(r, s.docLimit(), formForMask)
+	if ferr != nil {
+		return formParseResult(ferr, false)
 	}
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		writeErrPres(w, http.StatusBadRequest, "缺少待脱敏文件", "请在脱敏页选择纯文本或 .docx 文件。", i18n.P("http.mask_file_missing", nil))
-		return
+	if !fd.doc.present {
+		return http.StatusBadRequest, errPayload("缺少待脱敏文件", "请在脱敏页选择纯文本、.docx 或 .pptx 文件。",
+			i18n.P("http.mask_file_missing", nil))
 	}
-	defer file.Close()
-	data, err := io.ReadAll(file)
-	if err != nil {
-		writeErrPres(w, http.StatusBadRequest, "读取文件失败", "请重试。", i18n.P("http.file_read_failed", nil))
-		return
-	}
-	profileName := r.FormValue("profile")
+	profileName := fd.first("profile")
 	if profileName == "" {
 		profileName = config.DefaultProfile
 	}
 	if _, ok := s.cfg.Profiles[profileName]; !ok {
-		writeErrPres(w, http.StatusBadRequest, "未知 profile "+strconv.Quote(r.FormValue("profile")),
+		raw := fd.first("profile")
+		return http.StatusBadRequest, errPayload("未知 profile "+strconv.Quote(raw),
 			"可用选项："+strings.Join(s.profileDisplayNames(), "、"),
-			i18n.P("profile.unknown", map[string]any{"profile": r.FormValue("profile"), "options": strings.Join(s.profileDisplayNames(), "、")}))
-		return
+			i18n.P("profile.unknown", map[string]any{"profile": raw, "options": strings.Join(s.profileDisplayNames(), "、")}))
 	}
-	overrides, oerr := parseRuleOverrides(r.MultipartForm.Value, profileName)
+	overrides, oerr := parseRuleOverrides(fd.values, profileName)
 	if oerr != nil {
-		writeCoreErr(w, oerr)
-		return
+		return coreErrResult(oerr)
 	}
 	opts := core.MaskOptions{
 		Profile:         profileName,
 		RuleOverrides:   overrides,
-		ConfirmedCustom: r.MultipartForm.Value["confirmed"],
+		ConfirmedCustom: fd.all("confirmed"),
 	}
 	// 规则关 + 词提交：保持静默忽略（不解析、不校验、不 400，兼容现网）。
 	if ruleEnabled(s.cfg.RulesForProfile(profileName), overrides, detector.RuleCustom) {
-		var wordFile []byte
-		filePresent := false
-		if cf, _, ferr := r.FormFile("custom_file"); ferr == nil {
-			defer cf.Close()
-			wordFile, _ = io.ReadAll(cf)
-			filePresent = true // 0 字节文件也算提交，交由 core 报「0 合法词」
-		}
-		words, werr := core.ParseCustomWords(r.MultipartForm.Value["custom"], wordFile, filePresent)
+		words, werr := core.ParseCustomWords(fd.all("custom"), fd.word.data, fd.word.present)
 		if werr != nil {
-			writeCoreErr(w, werr)
-			return
+			return coreErrResult(werr)
 		}
 		opts.ExtraCustom = words
 	}
-	out, err := core.MaskFile(header.Filename, data, opts, s.cfg, s.audit)
+	// 保持旧错误优先级：profile/覆盖/词校验通过后再报文档大小超限。
+	if fd.doc.over {
+		return coreErrResult(loader.OverLimit(s.docLimit()))
+	}
+	out, err := core.MaskFile(fd.doc.filename, fd.doc.data, opts, s.cfg, s.audit)
 	if err != nil {
 		if pre, ok := err.(*core.PreviewRequiredError); ok {
-			writeJSON(w, http.StatusConflict, map[string]any{
+			return http.StatusConflict, map[string]any{
 				"ok":           false,
 				"error":        "preview_required",
 				"message":      pre.Error(),
 				"hits":         pre,
 				"presentation": pre.Presentation(),
-			})
-			return
+			}
 		}
-		writeCoreErr(w, err)
-		return
+		return coreErrResult(err)
 	}
 	resp := map[string]any{
 		"ok":           true,
@@ -554,61 +549,65 @@ func (s *Server) handleMask(w http.ResponseWriter, r *http.Request) {
 		"mapping_b64":  base64.StdEncoding.EncodeToString(out.MappingBytes),
 		"warnings":     out.Warnings,
 		"cleanup":      out.Cleanup,
+		"pptx_cleanup": out.PPTXCleanup,
 		"audit_failed": out.AuditFailed,
 	}
 	// 桌面模式下随成功响应下发本次原子的未保存 generation（浏览器模式不新增字段）。
 	if s.desktopMode && s.onArtifacts != nil {
 		resp["unsaved_generation"] = s.onArtifacts()
 	}
-	writeJSON(w, http.StatusOK, resp)
+	return http.StatusOK, resp
 }
 
 func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
+	status, payload := s.restoreResult(r)
+	s.respondForm(w, r, status, payload)
+}
+
+// restoreResult 处理 /api/restore：保持 mapping 接受范围、文件优先于粘贴与既有错误语义。
+func (s *Server) restoreResult(r *http.Request) (int, map[string]any) {
 	if r.Method != http.MethodPost {
-		writeErrPres(w, http.StatusMethodNotAllowed, "仅支持 POST", "请从还原页面执行操作。",
+		return http.StatusMethodNotAllowed, errPayload("仅支持 POST", "请从还原页面执行操作。",
 			i18n.P("http.method_post_only", map[string]any{"scope": "还原接口"}))
-		return
 	}
 	if !s.beginOperation() {
-		writeErrPres(w, http.StatusConflict, "有操作正在进行", "请等待当前处理或保存完成后再试。",
+		return http.StatusConflict, errPayload("有操作正在进行", "请等待当前处理或保存完成后再试。",
 			i18n.P("http.operation_busy", nil))
-		return
 	}
 	defer s.endOperation()
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		writeErrPres(w, http.StatusBadRequest, "表单解析失败", "请重新提交后再试。", i18n.P("http.form_parse_failed", nil))
-		return
-	}
-	mf, _, err := r.FormFile("mapping")
-	if err != nil {
-		writeErrPres(w, http.StatusBadRequest, "缺少 mapping 文件", "请选择本机上次脱敏后下载的 .mapping.json 文件。", i18n.P("http.mapping_missing", nil))
-		return
-	}
-	defer mf.Close()
-	mappingData, err := io.ReadAll(mf)
-	if err != nil {
-		writeErrPres(w, http.StatusBadRequest, "读取 mapping 失败", "请重试。", i18n.P("http.mapping_read_failed", nil))
-		return
-	}
 
+	fd, ferr := parseForm(r, s.docLimit(), formForRestore)
+	if ferr != nil {
+		return formParseResult(ferr, true)
+	}
+	if !fd.mapping.present {
+		return http.StatusBadRequest, errPayload("缺少 mapping 文件", "请选择本机上次脱敏后下载的 .mapping.json 文件。",
+			i18n.P("http.mapping_missing", nil))
+	}
 	var input []byte
 	fileName := ""
-	if file, header, ferr := r.FormFile("file"); ferr == nil {
-		defer file.Close()
-		input, _ = io.ReadAll(file)
-		fileName = header.Filename
-	} else if text := r.FormValue("text"); text != "" {
-		input = []byte(text)
+	switch {
+	case fd.doc.present:
+		// 文件优先：同时提交 text 时忽略 text（含其超限标记）。
+		if fd.doc.over {
+			return coreErrResult(loader.OverLimit(s.docLimit()))
+		}
+		input = fd.doc.data
+		fileName = fd.doc.filename
+	case fd.text.present && fd.text.value != "":
+		if fd.text.over {
+			return coreErrResult(loader.OverLimit(s.docLimit()))
+		}
+		input = []byte(fd.text.value)
 		fileName = "paste.txt"
-	} else {
-		writeErrPres(w, http.StatusBadRequest, "缺少待还原内容", "请上传 LLM 成品文件，或在文本框中粘贴内容。", i18n.P("http.restore_input_missing", nil))
-		return
+	default:
+		return http.StatusBadRequest, errPayload("缺少待还原内容", "请上传 LLM 成品文件，或在文本框中粘贴内容。",
+			i18n.P("http.restore_input_missing", nil))
 	}
 
-	out, err := core.RestoreFile(fileName, input, mappingData, s.cfg, s.audit)
+	out, err := core.RestoreFile(fileName, input, fd.mapping.data, s.cfg, s.audit)
 	if err != nil {
-		writeCoreErr(w, err)
-		return
+		return coreErrResult(err)
 	}
 	resp := map[string]any{
 		"ok":             true,
@@ -619,12 +618,13 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 		"restored_count": out.RestoredCount,
 		"warnings":       out.Warnings,
 		"cleanup":        out.Cleanup,
+		"pptx_cleanup":   out.PPTXCleanup,
 		"audit_failed":   out.AuditFailed,
 	}
 	if s.desktopMode && s.onArtifacts != nil {
 		resp["unsaved_generation"] = s.onArtifacts()
 	}
-	writeJSON(w, http.StatusOK, resp)
+	return http.StatusOK, resp
 }
 
 func (s *Server) handleExit(w http.ResponseWriter, r *http.Request) {
@@ -655,22 +655,6 @@ func (s *Server) handleExit(w http.ResponseWriter, r *http.Request) {
 // presenter 是带展示元数据的错误接口。
 type presenter interface {
 	Presentation() *i18n.Presentation
-}
-
-func writeCoreErr(w http.ResponseWriter, err error) {
-	var pres *i18n.Presentation
-	if p, ok := err.(presenter); ok {
-		pres = p.Presentation()
-	}
-	if he, ok := err.(*loader.HumanError); ok {
-		writeErrPres(w, http.StatusBadRequest, he.Reason, he.Advice, pres)
-		return
-	}
-	writeErrPres(w, http.StatusBadRequest, err.Error(), "请检查输入后重试。", pres)
-}
-
-func writeErr(w http.ResponseWriter, status int, reason, advice string) {
-	writeErrPres(w, status, reason, advice, nil)
 }
 
 // writeErrPres 写入错误响应并追加 presentation {message_id, params}；保留 error/message 兼容字段。

@@ -467,6 +467,7 @@ func TestMappingAndMaskedCandidates(t *testing.T) {
 	}{
 		{"txt", "notes.masked.txt", "notes", ".txt", true, 1, "notes-1.masked.txt", "notes-1.masked.mapping.json"},
 		{"docx", "合同.masked.docx", "合同", ".docx", true, 2, "合同-2.masked.docx", "合同-2.masked.mapping.json"},
+		{"pptx", "报告.masked.pptx", "报告", ".pptx", true, 1, "报告-1.masked.pptx", "报告-1.masked.mapping.json"},
 		{"源名已含 masked", "notes.masked.masked.txt", "notes.masked", ".txt", true, 1, "notes.masked-1.masked.txt", "notes.masked-1.masked.mapping.json"},
 		{"无后缀回退 txt", "README.masked.txt", "README", ".txt", true, 1, "README-1.masked.txt", "README-1.masked.mapping.json"},
 		{"单段点文件保留词干", ".env.masked.txt", ".env", ".txt", true, 2, ".env-2.masked.txt", ".env-2.masked.mapping.json"},
@@ -507,6 +508,7 @@ func TestRestoredCandidates(t *testing.T) {
 		{"notes.restored.txt", 0, "notes.restored.txt"},
 		{"notes.restored.txt", 1, "notes.restored-1.txt"},
 		{"合同.restored.docx", 2, "合同.restored-2.docx"},
+		{"报告.restored.pptx", 1, "报告.restored-1.pptx"},
 		{"restored.txt", 0, "restored.txt"},
 		{"restored.txt", 1, "restored-1.txt"},
 	}
@@ -535,6 +537,28 @@ func TestAutoSaveMaskFirstUsesOriginalNames(t *testing.T) {
 	// 不留临时文件。
 	if names := dirEntries(t, filepath.Join(root, "masked")); len(names) != 1 {
 		t.Fatalf("masked/ 只应有 1 个文件：%v", names)
+	}
+}
+
+func TestAutoSavePPTXPairedSuffixAndRestore(t *testing.T) {
+	root := t.TempDir()
+	w := newEnabledWorkspace(t, root, nil)
+	if err := os.WriteFile(filepath.Join(root, "masked", "报告.masked.pptx"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res := w.AutoSaveMask("报告.masked.pptx", b64("new"), "报告.masked.mapping.json", b64("{}"))
+	if filepath.Base(res.Masked.Path) != "报告-1.masked.pptx" || filepath.Base(res.Mapping.Path) != "报告-1.masked.mapping.json" {
+		t.Fatalf("PPTX 配对应共用 -1：%+v", res)
+	}
+	if err := os.WriteFile(filepath.Join(root, "restored", "报告.restored.pptx"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := w.AutoSaveRestored("报告.restored.pptx", b64("pptx"))
+	if filepath.Base(r.Path) != "报告.restored-1.pptx" {
+		t.Fatalf("PPTX 还原重名应顺延：%+v", r)
+	}
+	if got, _ := os.ReadFile(filepath.Join(root, "masked", "报告.masked.pptx")); string(got) != "old" {
+		t.Fatal("已有 PPTX 不得被覆盖")
 	}
 }
 
@@ -711,6 +735,13 @@ func TestAutoSaveRestoredTextAndDocx(t *testing.T) {
 	}
 	if filepath.Base(res.Path) != "合同.restored.docx" {
 		t.Fatalf("DOCX 命名应沿用原有：%q", res.Path)
+	}
+	res = w.AutoSaveRestored("报告.restored.pptx", b64("pptx"))
+	if res.Status != workspaceStatusSaved {
+		t.Fatalf("PPTX 还原应落盘：%+v", res)
+	}
+	if filepath.Base(res.Path) != "报告.restored.pptx" {
+		t.Fatalf("PPTX 命名应沿用原有：%q", res.Path)
 	}
 }
 

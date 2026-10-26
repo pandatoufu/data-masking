@@ -15,6 +15,7 @@ A Go + Wails v2 desktop app: it runs in its own window, opens no browser, create
 - **Four profiles**: three read-only presets `strict` / `balanced` / `minimal`, plus a `custom` profile with per-rule toggles.
 - **Reversible masking**: bracketed placeholders plus a paired plaintext mapping that restores placeholders found in the LLM reply.
 - **DOCX with layout preserved**: processes text in the body, tables, headers/footers, footnotes/endnotes and native text boxes, keeps tables and images, deletes comments and accepts supported revisions.
+- **PPTX path A with structure preserved**: processes native text in titles, body text, text boxes, grouped shapes, native tables, hidden slides, layouts, masters and notes; notes are kept, comments and people information are removed, and charts/SmartArt/embedded objects/text in images are retained with an unchecked-scope disclosure.
 - **Encoding tolerance**: plain text auto-detects UTF-8 / GBK; CRLF / LF line endings are preserved per line and never normalized.
 - **Automatic GUI output**: optional; writes artifacts into fixed folders beside the executable and never overwrites existing files.
 - **Fixed-directory quick selection**: dropdowns pick direct files from `original/` and `cards/` on the Mask page and from `pending/` and `mapping/` on the Restore page; a file is read only after an explicit selection, and all manual entries and paste mode remain.
@@ -46,7 +47,7 @@ The program directory is the workspace root (the real directory of `os.Executabl
 ### 4. Mask
 
 1. Start the app; the `Mask` page opens by default.
-2. **Choose a file** (any plain-text extension or none, or `.docx`), or pick a direct file from `original/` (refresh first; it is read only after selection). Click-to-select and drag-and-drop work on Windows; Linux supports click-to-select only.
+2. **Choose a file** (any plain-text extension or none, or `.docx`/`.pptx`), or pick a direct file from `original/` (refresh first; it is read only after selection). Click-to-select and drag-and-drop work on Windows; Linux supports click-to-select only.
 3. **Choose a profile**: the default `balanced` masks phone numbers, API keys and custom words only and **leaves email, IP and ID-card numbers untouched**. Pick `strict`, `minimal` or `custom` when you need more.
 4. (Optional) **Enter or import custom words**: typed text, a TXT import, or a single TXT word card from `cards/`; matching is literal and case-sensitive.
 5. **Run masking** and keep both artifacts:
@@ -77,12 +78,13 @@ Client JSON, `profile` selection, the cards word list, the two manual confirmati
 ## Platforms and formats
 
 - **Plain text**: any extension is accepted, including no extension and dotfiles such as `.env` and `.gitignore` (extension comparison is case-insensitive); typical examples are `txt`, `md`, `csv`, `json`, `yaml`, code and logs. Encoding is detected in order: NUL / UTF-16 is rejected, then strict UTF-8, then strict GBK, otherwise rejected. CRLF / LF are preserved per line without normalization.
-- **Known unsupported**: office documents such as `pdf`, `doc`/`docm`, `odt`, `rtf`, `ppt`/`pptx`, `xls`/`xlsx`, plus `pages`/`numbers`/`key`, containers such as `zip`/`7z`/`rar`/`gz`, programs such as `exe`/`dll`/`so` and images such as `png`/`jpg`/`gif` are rejected by name; decodable bytes do not make them plain text. Convert them with the original program or save as `.docx`; renaming alone is not recommended.
+- **Known unsupported**: office documents such as `pdf`, `doc`/`docm`, `odt`, `rtf`, legacy or macro/template/show formats such as `ppt`/`pptm`/`pot`/`pps`, `xls`/`xlsx`, plus `pages`/`numbers`/`key`, containers such as `zip`/`7z`/`rar`/`gz`, programs such as `exe`/`dll`/`so` and images such as `png`/`jpg`/`gif` are rejected by name; decodable bytes do not make them plain text. Convert them with the original program or save as `.docx`/`.pptx`; renaming alone is not recommended.
 - **DOCX**: Transitional and Strict are both accepted; macro-enabled, encrypted and digitally signed packages are rejected.
-- **Size limits**: 10 MiB per file by default (configurable); word files ≤ 1 MiB, ≤ 256 characters per word, ≤ 1000 participating words per run.
+- **PPTX**: normal `.pptx` Transitional and Strict presentations are accepted, path A only (PPTX source → masked PPTX → model-edited PPTX → local PPTX restore); a PPTX mapping pairs only with a PPTX reply. Macro-enabled, template/show, encrypted or signed packages, unknown comment families and native text that cannot be reliably enumerated are rejected.
+- **Size limits**: plain text, DOCX and PPTX share a default 50 MiB (52428800 bytes) per file, adjustable with the existing `max_file_size`; an explicit value already in your configuration wins. Word files remain ≤ 1 MiB, ≤ 256 characters per word, ≤ 1000 participating words per run. DOCX/PPTX packages also have a fixed 200 MiB total-extracted budget that the existing configuration cannot change, and it is not a process memory limit.
 - The name policy is a finite known-format set, not general format detection; an accepted name does not mean the content was validated. Binary detection is only the NUL / UTF-16 plus strict-encoding heuristic and **does not guarantee detecting every binary**. Plain text is replaced literally, so code or structured data such as JSON/CSV is **not guaranteed to remain syntactically valid** after replacement.
 
-Full limits and DOCX extraction budgets are in the [usage guide](docs/usage.en.md#supported-file-formats-and-limits); platform-specific behavior and build requirements are in [Building from source](docs/development.en.md).
+Full limits and DOCX/PPTX extraction budgets are in the [usage guide](docs/usage.en.md#supported-file-formats-and-limits); platform-specific behavior and build requirements are in [Building from source](docs/development.en.md).
 
 ---
 
@@ -100,10 +102,18 @@ Full limits and DOCX extraction budgets are in the [usage guide](docs/usage.en.m
 - After comments are deleted and supported revisions accepted, the **review history cannot be recovered**.
 - **Out of scope**: text inside images, document properties, field codes, data binding sources, hyperlink targets, charts/SmartArt and embedded attachments; refreshing fields or bindings **may reintroduce unprocessed content**.
 
+### PPTX scope
+
+- Processed text: **slides (including hidden and unreferenced declared slides), titles, body text, text boxes, grouped shapes, native tables, layouts, slide masters, notes slides, notes masters and handout masters**; notes are kept and processed in both directions, while page/shape/table/image/media and animation references are preserved.
+- Both directions remove supported classic/modern comments, anchors, people parts and comment-only resources; **comments cannot be recovered**. Unknown comment families are rejected with guidance to delete comments in PowerPoint and save again.
+- **Out of scope**: charts and data sources, SmartArt, embedded Excel/OLE objects, text in images, properties, field codes, link targets and review history other than comments; these are retained unchanged and results show a short unchecked summary. **Refreshing data/fields or some animations may reintroduce unprocessed content**.
+- Line wrapping, overflow, autofit or cross-run mixed styling after placeholder-width changes are not guaranteed to match the original. No rendering is provided and DOCX/PPTX conversion is not supported.
+
 ### Restore boundaries
 
 - Placeholder matching is case / full-width **best-effort**; placeholders rewritten or translated by the model cannot be recovered.
-- Restore recovers only the mapped text: it does **not** restore review history, the original ZIP bytes or cross-run mixed styling, and restoring text **does not restore Word layout**.
+- Restore recovers only the mapped text: it does **not** restore review history, the original ZIP bytes or cross-run mixed styling, and restoring text **does not restore Word layout**; PPTX restore also **does not restore the original template or cleared comments**.
+- PPTX restore keeps structural edits in the reply and replaces only mapped text; a text-fingerprint difference is an advisory reference and is not an assertion that the wrong mapping was used.
 - Each headless job has exactly one successful return trip; return-trip warnings are reference signals and do not block local results.
 
 ### Local operation

@@ -179,6 +179,7 @@ func (a *App) publishRestored(jobID, attemptID, responseSHA string, out *core.Re
 		return Response{}, err
 	}
 	warnings = append(warnings, docxWarnings(out.Cleanup, out.Format == "docx")...)
+	warnings = append(warnings, pptxWarnings(out.PPTXCleanup, out.Format == "pptx")...)
 	warnings = append(warnings, auditWarning(out.AuditFailed)...)
 	if err := a.Store.Append(jobID, Record{
 		Type:           RecRestored,

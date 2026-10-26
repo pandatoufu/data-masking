@@ -13,7 +13,7 @@ import (
 var deniedExtensions = []string{
 	".pdf", ".doc", ".docm", ".dot", ".dotx", ".dotm",
 	".odt", ".ott", ".fodt", ".rtf",
-	".ppt", ".pptx", ".pptm", ".pot", ".potx", ".potm",
+	".ppt", ".pptm", ".pot", ".potx", ".potm",
 	".pps", ".ppsx", ".ppsm", ".odp", ".otp", ".fodp",
 	".xls", ".xlsx", ".xlsm", ".xlsb", ".xlt", ".xltx", ".xltm",
 	".ods", ".ots", ".fods",
@@ -65,11 +65,19 @@ func TestClassifyNameTable(t *testing.T) {
 			t.Errorf("%q 应仅进 DOCX 流程", name)
 		}
 	}
-	for _, name := range []string{"data.pdf", "notes.RTF", "a.tar.gz", "X.PPTX", ".ENV.LOCAL.RTF"} {
+	for _, name := range []string{"a.pptx", "B.PPTX", ".pptx", "演示.Pptx"} {
+		if got := ClassifyName(name); got != NameKindPPTX {
+			t.Errorf("ClassifyName(%q)=%q，期望 PPTX", name, got)
+		}
+		if !IsPPTXName(name) || !IsDocumentCandidate(name) || IsTextCandidate(name) || IsDocxName(name) {
+			t.Errorf("%q 应仅进 PPTX 流程", name)
+		}
+	}
+	for _, name := range []string{"data.pdf", "notes.RTF", "a.tar.gz", "X.PPTM", ".ENV.LOCAL.RTF", "slides.pptm"} {
 		if got := ClassifyName(name); got != NameKindDenied {
 			t.Errorf("ClassifyName(%q)=%q，期望拒绝", name, got)
 		}
-		if IsDocumentCandidate(name) || IsTextCandidate(name) || IsDocxName(name) {
+		if IsDocumentCandidate(name) || IsTextCandidate(name) || IsDocxName(name) || IsPPTXName(name) {
 			t.Errorf("%q 不应为任何入口候选", name)
 		}
 	}
@@ -78,7 +86,7 @@ func TestClassifyNameTable(t *testing.T) {
 // 名称门禁：旧/新后缀、无后缀与点文件放行；拒绝集合大小写全表拒绝。
 func TestValidateFileNamePolicy(t *testing.T) {
 	accept := []string{
-		"a.txt", "A.TXT", "b.md", "c.LOG", "d.py", "e.Js", "f.docx", "G.DOCX",
+		"a.txt", "A.TXT", "b.md", "c.LOG", "d.py", "e.Js", "f.docx", "G.DOCX", "slides.pptx", "S.PPTX",
 		"data.csv", "data.JSON", "config.yaml", "main.go", "notes.xyz",
 		"README", "readme", "noext", ".env", ".gitignore", ".env.local",
 	}
@@ -193,5 +201,22 @@ func TestLoadEndToEnd(t *testing.T) {
 	}
 	if !strings.HasSuffix(JoinLines(doc.Lines), "\n") {
 		t.Fatal("末尾换行应保留")
+	}
+}
+
+// 缩小注入预算的精确边界：等于上限通过、加 1 字节拒绝，且回退值同样生效。
+func TestValidateSizeInjectedBudgetBoundary(t *testing.T) {
+	for _, limit := range []int64{1, 64, 1024} {
+		if err := ValidateSize(limit, limit); err != nil {
+			t.Fatalf("limit=%d 恰好等于上限应通过：%v", limit, err)
+		}
+		err := ValidateSize(limit+1, limit)
+		if err == nil {
+			t.Fatalf("limit=%d 加 1 字节应拒绝", limit)
+		}
+		var he *HumanError
+		if !errors.As(err, &he) || he.MessageID != "file.too_large" {
+			t.Fatalf("limit=%d 应返回 file.too_large，got %#v", limit, err)
+		}
 	}
 }

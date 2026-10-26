@@ -261,7 +261,6 @@ git -C <export2-dir> rev-list --parents -n 1 HEAD   # 只有上一个公开提�
 写操作前重新枚举远端与旧版本对象，记录预期旧 `P` 完整 SHA、Release ID 与附件 ID/名称：
 
 ```sh
-git fetch origin
 git fetch github
 git ls-remote --heads --tags github
 git rev-parse github/github-public     # 必须等于记录的 P
@@ -282,16 +281,15 @@ gh release delete v1.1 --repo pandatoufu/data-masking --yes
 git -C <export-dir> push github :refs/tags/v1.1
 ```
 
-新 tag 使用同一局部 noreply 身份创建 annotated tag，并推送到两个远端（同名 tag 必须指向同一 tag 对象）：
+新 tag 使用同一局部 noreply 身份创建 annotated tag，并推送到 GitHub：
 
 ```sh
 git -C <export-dir> tag -a v1.2.0 -m "data-masking v1.2.0" <R>
 git -C <export-dir> cat-file -p refs/tags/v1.2.0   # tagger 为 noreply 身份
 git -C <export-dir> push github refs/tags/v1.2.0
-git -C <export-dir> push <forgejo-remote> refs/tags/v1.2.0
 ```
 
-任一步失败都暂停：不把含旧信息的分支/tag/附件恢复为默认回滚，也不静默移动已发布 tag。Forgejo 认证不可用时如实标注同步未完成，不索取或输出凭据。
+任一步失败都暂停：不把含旧信息的分支/tag/附件恢复为默认回滚，也不静默移动已发布 tag。
 
 ### 5. 从 `R` 串行构建并白名单打包
 

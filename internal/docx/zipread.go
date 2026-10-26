@@ -12,7 +12,7 @@ import (
 // Limits 是 DOCX 独立资源预算。零值由 normalize 填入默认值。
 type Limits struct {
 	MaxEntries           int   // 最多条目数（默认 2048）
-	MaxTotalUncompressed int64 // 所有条目实际解压总量（默认 100MiB）
+	MaxTotalUncompressed int64 // 所有条目实际解压总量（默认 200MiB）
 	MaxXMLPart           int64 // 单个 XML 部件大小（默认 20MiB）
 	MaxDepth             int   // XML 嵌套深度（默认 128）
 }
@@ -21,7 +21,7 @@ type Limits struct {
 func DefaultLimits() Limits {
 	return Limits{
 		MaxEntries:           2048,
-		MaxTotalUncompressed: 100 * 1024 * 1024,
+		MaxTotalUncompressed: 200 * 1024 * 1024,
 		MaxXMLPart:           20 * 1024 * 1024,
 		MaxDepth:             128,
 	}

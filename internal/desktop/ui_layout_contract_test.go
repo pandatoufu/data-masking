@@ -480,3 +480,38 @@ func TestDocumentFormatNotesContract(t *testing.T) {
 		t.Error("词卡仍应仅 TXT、mapping 仍应仅 JSON")
 	}
 }
+
+// PPTX 静态契约：格式分支、独立清理/未检查摘要、双语格式说明与 version 3 映射元数据读取。
+func TestPPTXStaticContract(t *testing.T) {
+	html := repoFile(t, "web", "static", "index.html")
+	js := repoFile(t, "web", "static", "app.js")
+
+	for _, want := range []string{
+		`b.format === "pptx"`, "pptx_cleanup", "pptxCleanupHTML",
+		"ui.input_pptx", "ui.output_pptx", "ui.pptx_unchecked_short",
+		"ui.cleanup_pptx_comments", "ui.cleanup_pptx_people",
+	} {
+		if !strings.Contains(js, want) {
+			t.Errorf("app.js 应包含 PPTX 契约 %q", want)
+		}
+	}
+	if strings.Count(js, `b.format === "pptx"`) < 2 {
+		t.Error("脱敏与还原结果都应显式识别 pptx，而不是按非 DOCX 即文本")
+	}
+	for _, id := range []string{"ui.doc_formats_text", "ui.doc_formats_examples"} {
+		zh := i18n.T(i18n.ZH, id, nil)
+		en := i18n.T(i18n.EN, id, nil)
+		if !strings.Contains(strings.ToLower(zh), "pptx") || !strings.Contains(strings.ToLower(en), "pptx") {
+			t.Errorf("%s 双语应说明 PPTX：%q / %q", id, zh, en)
+		}
+		if !strings.Contains(html, ">"+zh+"</span>") {
+			t.Errorf("%s 静态中文回退应同步：%q", id, zh)
+		}
+	}
+	if strings.Contains(html, "PPTX、XLSX 等文档格式") {
+		t.Error("静态回退不得再把 PPTX 列为不支持")
+	}
+	if !strings.Contains(js, "obj.version == null ? 1 : obj.version") {
+		t.Error("当前映射元数据读取应保留 version 3，不得静默按 version 1")
+	}
+}

@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"io"
@@ -256,7 +257,7 @@ func TestWorkspaceInputNewDocumentNamePolicy(t *testing.T) {
 		kind string
 		want []string
 	}{
-		{WorkspaceInputOriginal, []string{".env", "README", "data.json", "notes.xyz", "合同.docx"}},
+		{WorkspaceInputOriginal, []string{".env", "README", "data.json", "notes.xyz", "slides.pptx", "合同.docx"}},
 		{WorkspaceInputPending, []string{"README", "reply.json"}},
 		{WorkspaceInputCards, []string{"ok.txt"}},
 		{WorkspaceInputMapping, []string{"pair.json"}},
@@ -278,14 +279,18 @@ func TestWorkspaceInputNewDocumentNamePolicy(t *testing.T) {
 	if res.Status != inputStatusOK || res.Name != "README" {
 		t.Fatalf("无后缀文件应可显式读取：%+v", res)
 	}
-	for _, name := range []string{"slides.pptx", "notes.rtf", "image.png"} {
+	pptx := in.Read(WorkspaceInputOriginal, "slides.pptx")
+	if pptx.Status != inputStatusOK || string(decodedContent(t, pptx)) != "pptx" {
+		t.Fatalf("PPTX 直属文件应可显式读取：%+v", pptx)
+	}
+	for _, name := range []string{"notes.rtf", "image.png"} {
 		bad := in.Read(WorkspaceInputOriginal, name)
 		if bad.Status != inputStatusFailed || bad.MessageID != "input.unsupported_format" || bad.DataB64 != "" {
 			t.Fatalf("%q 应因已知不支持格式在打开前拒绝：%+v", name, bad)
 		}
 	}
-	if counters.opens != 2 || counters.bytes != int64(len("KEY=v")+len("readme")) {
-		t.Fatalf("只应打开并读取两次显式读取：opens=%d bytes=%d", counters.opens, counters.bytes)
+	if counters.opens != 3 || counters.bytes != int64(len("KEY=v")+len("readme")+len("pptx")) {
+		t.Fatalf("只应打开并读取三次显式读取：opens=%d bytes=%d", counters.opens, counters.bytes)
 	}
 }
 
@@ -538,3 +543,39 @@ func TestWorkspaceInputReadPermissionFailure(t *testing.T) {
 
 // mkfifo 在 POSIX 平台创建命名管道，用于验证特殊文件被跳过。
 func mkfifo(path string) error { return mkfifoPlatform(path) }
+
+// 文档类固定目录读取沿用同一有效上限：纯文本、DOCX、PPTX 精确等于通过、加 1 拒绝，
+// 超限不返回正文。只按名称与字节数验证，不解析格式内容。
+func TestWorkspaceInputDocumentLimitAcrossFormats(t *testing.T) {
+	root := t.TempDir()
+	files := map[string][]byte{
+		"notes.txt": []byte("phone 13800138000\n"),
+		"合同.docx":   append([]byte("PK\x03\x04"), []byte("docx-payload")...),
+		"报告.pptx":   append([]byte("PK\x03\x04"), []byte("pptx-payload")...),
+	}
+	seedInputDir(t, root, workspaceDirOriginal, files)
+
+	for name, data := range files {
+		t.Run(name, func(t *testing.T) {
+			limit := int64(len(data))
+			in, counters := newTestInput(root, limit)
+			res := in.Read(WorkspaceInputOriginal, name)
+			got := decodedContent(t, res)
+			if !bytes.Equal(got, data) {
+				t.Fatalf("等于上限应完整读取：%d != %d", len(got), len(data))
+			}
+			if counters.bytes != limit {
+				t.Fatalf("等于上限只应读取 %d 字节，实际 %d", limit, counters.bytes)
+			}
+
+			over, overCounters := newTestInput(root, limit-1)
+			res = over.Read(WorkspaceInputOriginal, name)
+			if res.MessageID != "input.too_large" || res.DataB64 != "" {
+				t.Fatalf("加 1 字节应拒绝且不返回正文：%+v", res)
+			}
+			if overCounters.bytes > limit {
+				t.Fatalf("超限读取不得超过 limit+1 字节：%d > %d", overCounters.bytes, limit)
+			}
+		})
+	}
+}
